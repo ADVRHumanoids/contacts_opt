@@ -88,7 +88,9 @@ public:
     ExCost() : ExCost("cost_term") 
     {
         _W_p = 0;
+	_W_com = 0;
         _p_ref.setZero(12);
+	_com_ref.setZero();
     }
     ExCost(const std::string& name) : CostTerm(name) {}
 
@@ -97,6 +99,12 @@ public:
     {
         _W_p = W_p; 
         _p_ref = p_ref;
+    }
+    
+    void SetCOMRef(const Eigen::VectorXd& com_ref, const double& W_com)
+    {
+        _W_com = W_com; 
+        _com_ref = com_ref;
     }
     
     
@@ -112,6 +120,10 @@ public:
                 
                 value += 0.5*_W_p*(pi -_p_ref.segment(3*(i-1),3)).squaredNorm() + 0.5*Fi.squaredNorm();
             } 
+            
+            Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
+	    
+	    value += 0.5*_W_com*(com -_com_ref).squaredNorm();
             
             return value;
     };
@@ -140,14 +152,24 @@ public:
                 jac.coeffRef(0, 2) = _W_p*(pi.z()-_p_ref(3*i+2));
                 
             }
+	}
+	
+	Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
             
-        }
+	if(var_set == "com")
+	{ 
+	  jac.coeffRef(0, 0) = _W_com*(com.x()-_com_ref.x());
+	  jac.coeffRef(0, 1) = _W_com*(com.y()-_com_ref.y());
+	  jac.coeffRef(0, 2) = _W_com*(com.z()-_com_ref.z());
+	}		
+       
     }
 
 private:
 
-   double _W_p;
+   double _W_p, _W_com;
    Eigen::VectorXd _p_ref;
+   Eigen::Vector3d _com_ref;
 
     
 };

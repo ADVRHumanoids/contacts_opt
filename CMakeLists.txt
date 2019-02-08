@@ -1,4 +1,4 @@
-project(ifopt_contacts_node)
+project(contacts_opt)
 
 # CMake minimum version and policies
 cmake_minimum_required(VERSION 2.8.12)
@@ -109,10 +109,14 @@ install(DIRECTORY include/ifopt_problem/
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 install(DIRECTORY launch/
-#   # myfile2
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
   FILES_MATCHING PATTERN "*.launch"
 )
-				  					  					  
+			  					  					  
+## Mark other files for installation (e.g. launch and bag files, etc.)
+install(DIRECTORY problem/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/problem
+  FILES_MATCHING PATTERN "*.yaml"
+)
 
 

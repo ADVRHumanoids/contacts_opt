@@ -10,7 +10,7 @@
         textfile="$(env ROBOTOLOGY_ROOT)/configs/ADVR_shared/centauro/srdf/centauro.srdf"/>
     
     <param name="cartesian/problem_description" 
-        textfile="$(find cartesian_interface)/examples/configs/centauro_simple_stack.yaml"/>
+        textfile="$(find contacts_opt)/problem/contacts_opt_stack.yaml"/>
     
     <param name="cartesian/joint_blacklist" type="yaml" 
         value="[neck_velodyne]"/>

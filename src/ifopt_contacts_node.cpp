@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "ifopt_contacts_node");
     ros::NodeHandle nh;
     
-//     XBot::Cartesian::RosImpl ci;
+    XBot::Cartesian::RosImpl ci;
 
     double rate;
     nh.param("rate", rate, 100.);
@@ -57,12 +57,11 @@ int main(int argc, char **argv)
     Eigen::Vector3d F_max; F_max.setOnes(); F_max *= 100;
     
     Eigen::Vector3d C, R, P; 
-    C << 1.5, 0.0, 1.0;
-    R << 2, 20, 1;
-    P << 8, 8, 4; 
+    C <<  1.5,  0.0,  1.0;
+    R <<  2.0, 20.0,  1.0;
+    P << 20.0, 20.0, 20.0; 
     
     double mu = 0.2;
-    double Wp = 10;
     
     Eigen::VectorXd p_ref;
     p_ref.setZero(12);
@@ -70,6 +69,13 @@ int main(int argc, char **argv)
 	      0.5,  0.3, 0.0, 
 	     -0.5, -0.3, 0.0, 
 	     -0.5,  0.3, 0.0;
+	     
+    double Wp = 10;
+	     
+    Eigen::Vector3d com_ref;
+    com_ref.setZero();
+    
+    double Wcom = 10;
        
     auto p1 = std::make_shared<ExVariables>("p1");
     auto p2 = std::make_shared<ExVariables>("p2");
@@ -105,8 +111,9 @@ int main(int argc, char **argv)
     auto n_p3 = std::make_shared<NormalConstraint>("p3");
     auto n_p4 = std::make_shared<NormalConstraint>("p4");
 	  
-    auto cost = std::make_shared<ExCost>();
-	    
+    auto cost = std::make_shared<ExCost>();	    
+    
+    std::vector<std::string> feet = {"wheel_2", "wheel_1", "wheel_4", "wheel_3"};
 	    
     nlp.AddVariableSet(p1); p1->SetBounds(Eigen::Vector3d( 0.1, -1.0, 0.0),Eigen::Vector3d( 2.0, -0.1, 0.4));
     nlp.AddVariableSet(p2); p2->SetBounds(Eigen::Vector3d( 0.1,  0.1, 0.0),Eigen::Vector3d( 2.0,  1.0, 0.4));
@@ -142,39 +149,31 @@ int main(int argc, char **argv)
     n_p3->SetParam(C,R,P); nlp.AddConstraintSet(n_p3);
     n_p4->SetParam(C,R,P); nlp.AddConstraintSet(n_p4); 
 	    
-    cost->SetPosRef(p_ref, Wp); nlp.AddCostSet(cost);
+    cost->SetPosRef(p_ref, Wp); 
+//     cost->SetCOMRef(com_ref, Wcom);
+    nlp.AddCostSet(cost);
     
     ipopt.Solve(nlp);	
     x_opt = nlp.GetOptVariables()->GetValues(); 
 	
-    double time = 0;
-    double period = loop_rate.expectedCycleTime().toSec();
-
-    while(ros::ok())
+    if(log)
     {
-        model->setJointPosition(q);
-        model->update();
-	
-//     ci.setTargetPose();
-//     ci.waitReachCompleted();
-//     ci.setForceReference()
-
-        time += period;
-		
-	ipopt.Solve(nlp);		
-	x_opt = nlp.GetOptVariables()->GetValues();
-
-        if(log)
-        {
-	    logger->add("q", q);
-	    logger->add("x_sol", x_opt);
-            logger->add("com", x_opt.tail(3));
-	    logger->add("p", x_opt.head(12));
-	    logger->add("F", x_opt.segment(12,12));	    
-        }
-	
-	ros::spinOnce();
-        loop_rate.sleep();
+	logger->add("q", q);
+	logger->add("x_sol", x_opt);
+	logger->add("com", x_opt.tail(3));
+	logger->add("p", x_opt.head(12));
+	logger->add("F", x_opt.segment(12,12));	    
+    }
+    
+    Eigen::Affine3d w_T_com;
+    w_T_com.translation() = x_opt.tail(3);
+    ci.setTargetPose("com", w_T_com, 5.0);
+    
+    for(int i : {0, 1, 2, 3})
+    {
+	Eigen::Affine3d w_T_f;
+	w_T_f.translation() = x_opt.head(12).segment<3>(3*i);
+	ci.setTargetPose(feet[i], w_T_f, 5.0);
     }
 
     if(log)

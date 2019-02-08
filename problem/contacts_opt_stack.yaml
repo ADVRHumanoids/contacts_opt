@@ -1,0 +1,57 @@
+solver_options:
+    regularization: 1e-6
+    back_end: "qpoases"
+
+stack:
+    - ["Wheel_FL", "Wheel_FR", "Wheel_HR", "Wheel_HL"]
+    - ["Com"]
+    - ["Postural"]
+constraints: ["JointLimits", "VelocityLimits"]
+
+Wheel_FL:
+    type: "Cartesian"
+    distal_link: "wheel_1"
+    indices: [0, 1, 2]
+
+Wheel_FR:
+    type: "Cartesian"
+    distal_link: "wheel_2"
+    indices: [0, 1, 2]
+    
+Wheel_HL:
+    type: "Cartesian"
+    distal_link: "wheel_3"
+    indices: [0, 1, 2]
+    
+Wheel_HR:
+    type: "Cartesian"
+    distal_link: "wheel_4"
+    indices: [0, 1, 2]
+    
+LeftArm:
+    type: "Cartesian"
+    distal_link: "arm1_8"
+    lambda: 0.1
+
+RightArm:
+    type: "Cartesian"
+    distal_link: "arm2_8"
+    lambda: 0.1
+    
+Com:
+    type: "Com"
+    lambda: 0.1
+    weight: 10
+    
+Postural:
+    type: "Postural"
+    lambda: 0.01
+    weight:
+    VIRTUALJOINT_1: 0.0
+    VIRTUALJOINT_2: 0.0
+    VIRTUALJOINT_3: 0.0
+    VIRTUALJOINT_4: 0.0
+    VIRTUALJOINT_5: 0.0
+    VIRTUALJOINT_6: 0.0
+
+    

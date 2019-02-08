@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>ifopt_contacts_node</name>
+  <name>contacts_opt</name>
   <version>0.0.0</version>
   <description>The ifopt_contacts_node package</description>
 
