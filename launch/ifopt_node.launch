@@ -1,0 +1,52 @@
+<launch>
+
+    <arg name="rate" default="100.0"/>
+    <param name="robot_description" textfile="$(find RDC2018)/robot_urdf/coman.urdf"/>
+    <param name="robot_description_semantic" textfile="$(find RDC2018)/robot_srdf/coman.srdf"/>
+    <param name="log" type="bool" value="true"/>
+    
+    <!--rosparam>
+      zeros:
+        RHipSag: -0.436
+        RKneeSag: 0.8726
+        RAnkSag: -0.436
+        LHipSag: -0.436
+        LKneeSag: 0.8726
+        LAnkSag: -0.436
+        LShSag:  0.349
+        LShLat: 0.349
+        LShYaw: -0.261
+        LElbj: -1.396
+        RShSag:  0.349
+        RShLat: -0.349
+        RShYaw: 0.261
+        RElbj: -1.396
+    </rosparam-->
+
+     <rosparam>
+      zeros:
+        RHipSag: -0.436
+        RKneeSag: 0.8726
+        RAnkSag: -0.436
+        LHipSag: -0.436
+        LKneeSag: 0.8726
+        LAnkSag: -0.436
+        LShSag:  0.
+        LShLat:  0.
+        LShYaw:  0.
+        LElbj: -1.57
+        RShSag:  0.
+        RShLat:  0.
+        RShYaw:  0.
+        RElbj: -1.57
+    </rosparam>
+
+    <node pkg="ifopt_contacts_node" type="ifopt_contacts_node" name="ifopt_contacts_node" required="true" output="screen">
+        <param name="is_model_floating_base" type="bool" value="true"/>
+        <param name="model_type" value="RBDL"/>
+        <param name="rate" value="$(arg rate)"/>    
+    </node> 
+
+    <node pkg="cartesian_interface" type="marker_spawner" name="cartesian_markers" output="screen"/>   
+    
+</launch>
