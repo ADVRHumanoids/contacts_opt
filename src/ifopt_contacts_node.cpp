@@ -113,12 +113,12 @@ int main(int argc, char **argv)
 	  
     auto cost = std::make_shared<ExCost>();	    
     
-    std::vector<std::string> feet = {"wheel_2", "wheel_1", "wheel_4", "wheel_3"};
+    std::vector<std::string> feet = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
 	    
-    nlp.AddVariableSet(p1); p1->SetBounds(Eigen::Vector3d( 0.1, -1.0, 0.0),Eigen::Vector3d( 2.0, -0.1, 0.4));
-    nlp.AddVariableSet(p2); p2->SetBounds(Eigen::Vector3d( 0.1,  0.1, 0.0),Eigen::Vector3d( 2.0,  1.0, 0.4));
-    nlp.AddVariableSet(p3); p3->SetBounds(Eigen::Vector3d(-2.0, -1.0, 0.0),Eigen::Vector3d(-0.1, -0.1, 0.4));
-    nlp.AddVariableSet(p4); p4->SetBounds(Eigen::Vector3d(-2.0,  0.1, 0.0),Eigen::Vector3d(-0.1,  1.0, 0.4));
+    nlp.AddVariableSet(p1); p1->SetBounds(Eigen::Vector3d( 0.1,  0.1, 0.0),Eigen::Vector3d( 2.0,  1.0, 0.4));
+    nlp.AddVariableSet(p2); p2->SetBounds(Eigen::Vector3d( 0.1, -1.0, 0.0),Eigen::Vector3d( 2.0, -0.1, 0.4));
+    nlp.AddVariableSet(p3); p3->SetBounds(Eigen::Vector3d(-2.0,  0.1, 0.0),Eigen::Vector3d(-0.1,  1.0, 0.4));
+    nlp.AddVariableSet(p4); p4->SetBounds(Eigen::Vector3d(-2.0, -1.0, 0.0),Eigen::Vector3d(-0.1, -0.1, 0.4));
       
     nlp.AddVariableSet(F1); F1->SetBounds(-F_max,F_max);
     nlp.AddVariableSet(F2); F2->SetBounds(-F_max,F_max);
@@ -150,8 +150,12 @@ int main(int argc, char **argv)
     n_p4->SetParam(C,R,P); nlp.AddConstraintSet(n_p4); 
 	    
     cost->SetPosRef(p_ref, Wp); 
-//     cost->SetCOMRef(com_ref, Wcom);
     nlp.AddCostSet(cost);
+    
+    // TODO: orientation from normal vector
+    // TODO: feedback com position as com_ref
+    // cost->SetCOMRef(com_ref, Wcom);
+    // single foot lift
     
     ipopt.Solve(nlp);	
     x_opt = nlp.GetOptVariables()->GetValues(); 
