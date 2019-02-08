@@ -1,54 +1,14 @@
-% CONSTRAINT formulation - superellipsoid
-clear all
-close all
-clc
+% PLOT IFOPT
 
-% addpath('cd home/matteo/Downloads');
-
-Fd=[80;0;100];
-tau_d=[0;0;0];
-
-F_max=100;
-
-com=[-0.1 0 0.5];
-
-% fun=@(x) x(13:24)'* x(13:24);
-
-xref=[ 0.5, -0.3, 0, ... 
-       0.5,  0.3, 0, ...
-      -0.5, -0.3, 0, ...
-      -0.5,  0.3, 0, ...
-       zeros(1,12)]';
-   
- W=[100*ones(12,1);ones(12,1)];
-
-fun=@(x) ((x-xref)'*diag(W)*(x-xref));
-
-x0=randn(24,1); 
-
-ub1=[2 -.1 .4]'; lb1=[.1 -1 0]';
-ub2=[2 1 .4]'; lb2=[.1 .1 0]';
-ub3=[-.1 -.1 .4]'; lb3=[-2 -1 0]';
-ub4=[-.1 1 .4]'; lb4=[-2 .1 0]';
-
-ub=[ub1;ub2;ub3;ub4;F_max*ones(12,1)];
-lb=[lb1;lb2;lb3;lb4;-F_max*ones(12,1)];
-
-options = optimoptions('fmincon','MaxFunctionEvaluations',6000);
-      
-constraint_fun = @(x) mycon_super_ellipsoid(x,Fd,tau_d,com,F_max);
-
-[x,fval,exitflag,output,lambda,grad,hessian] = fmincon(fun,x0,[],[],[],[],lb,ub,constraint_fun,options);
-
-F=[x(13:15),x(16:18),x(19:21),x(22:24)]
-p=[x(1:3),x(4:6),x(7:9),x(10:12)]
-       
-
-% PLOT FMINCON
-
-close all
+close all;
+clc;
 
 addpath('superquadratics');
+
+com = x_sol(37:end,1)';
+x = x_sol(1:24,1)';
+
+Fd=[100;0;100]';
 
 [x_s,y_s,z_s] = sphere;
 [x_e, y_e, z_e]=superellipsoid([1.5 0 1],[2 1 1],[8 8 4],100);
@@ -178,7 +138,3 @@ ylim([-0.5 0.5]);
 zlim([0 1]);
 set(gca,'TickLabelInterpreter','latex');
 view([0 0])
-
-
-
-      

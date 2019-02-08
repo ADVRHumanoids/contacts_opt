@@ -167,6 +167,7 @@ int main(int argc, char **argv)
         if(log)
         {
 	    logger->add("q", q);
+	    logger->add("x_sol", x_opt);
             logger->add("com", x_opt.tail(3));
 	    logger->add("p", x_opt.head(12));
 	    logger->add("F", x_opt.segment(12,12));	    
