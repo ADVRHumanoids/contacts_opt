@@ -57,15 +57,19 @@ int main(int argc, char **argv)
     
     model->getPose("wheel_1",pose);  
     Eigen::Vector3d wheel_1 = pose.translation();
+    wheel_1.y() =  0.35;
     
     model->getPose("wheel_2",pose);  
     Eigen::Vector3d wheel_2 = pose.translation();
+    wheel_2.y() = -0.35;
     
     model->getPose("wheel_3",pose);  
     Eigen::Vector3d wheel_3 = pose.translation();
+    wheel_3.y() =  0.35;
     
     model->getPose("wheel_4",pose);  
     Eigen::Vector3d wheel_4 = pose.translation();
+    wheel_4.y() = -0.35;
     
     model->getPose("pelvis",pose);  
     Eigen::Vector3d pelvis = pose.translation();
@@ -138,10 +142,10 @@ int main(int argc, char **argv)
     std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
     std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
 	    
-    nlp.AddVariableSet(p1); p1->SetBounds(wheel_1 - Eigen::Vector3d( 0.0,  0.3, 0.0), wheel_1 + Eigen::Vector3d( 0.3, 0.0, 0.5));
-    nlp.AddVariableSet(p2); p2->SetBounds(wheel_2 - Eigen::Vector3d( 0.0,  0.0, 0.0), wheel_2 + Eigen::Vector3d( 0.3, 0.3, 0.5));
-    nlp.AddVariableSet(p3); p3->SetBounds(wheel_3 - Eigen::Vector3d( 0.3,  0.3, 0.0), wheel_3 + Eigen::Vector3d( 0.0, 0.0, 0.5));
-    nlp.AddVariableSet(p4); p4->SetBounds(wheel_4 - Eigen::Vector3d( 0.3,  0.0, 0.0), wheel_4 + Eigen::Vector3d( 0.0, 0.3, 0.5));
+    nlp.AddVariableSet(p1); p1->SetBounds(wheel_1 - Eigen::Vector3d( 0.0,  0.0, 0.0), wheel_1 + Eigen::Vector3d( 0.3, 0.3, 0.5)); 
+    nlp.AddVariableSet(p2); p2->SetBounds(wheel_2 - Eigen::Vector3d( 0.0,  0.3, 0.0), wheel_2 + Eigen::Vector3d( 0.3, 0.0, 0.5));  
+    nlp.AddVariableSet(p3); p3->SetBounds(wheel_3 - Eigen::Vector3d( 0.3,  0.0, 0.0), wheel_3 + Eigen::Vector3d( 0.0, 0.3, 0.5)); 
+    nlp.AddVariableSet(p4); p4->SetBounds(wheel_4 - Eigen::Vector3d( 0.3,  0.3, 0.0), wheel_4 + Eigen::Vector3d( 0.0, 0.0, 0.5));  
       
     nlp.AddVariableSet(F1); F1->SetBounds(-F_max,F_max);
     nlp.AddVariableSet(F2); F2->SetBounds(-F_max,F_max);
@@ -228,14 +232,12 @@ int main(int argc, char **argv)
 	w_T_f.translation() = pi;
 	
 	ci.setTargetPose(feet[i], w_T_f, 5.0);
-// 	ci.waitReachCompleted(feet[i]);
 	
 	Eigen::Affine3d a_T_f;
 	a_T_f.translation() = ni;
 	a_T_f.linear() =  R.transpose();
 	
 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
-// 	ci.waitReachCompleted(ankle[i]);
 
     }
     
