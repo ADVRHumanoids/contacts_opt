@@ -124,7 +124,7 @@ public:
             Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
 	    
 	    value += 0.5*_W_com*(com -_com_ref).squaredNorm();
-            
+	                
             return value;
     };
 

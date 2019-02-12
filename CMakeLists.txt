@@ -27,7 +27,8 @@ find_package(ReflexxesTypeII REQUIRED)
 find_package(catkin REQUIRED COMPONENTS roscpp
                                         std_msgs
                                         geometry_msgs
-                                        sensor_msgs)
+                                        sensor_msgs
+                                        tf)
                                         
                                         
 catkin_package(
@@ -86,7 +87,7 @@ target_link_libraries(ifopt_contacts_node ${OpenSoT_LIBRARIES}
 					  ${XBotInterface_LIBRARIES}
 					  ${catkin_LIBRARIES}
 					  ${ReflexxesTypeII_LIBRARIES}
-					  ${cartesian_interface_LIBRARIES}
+					  ${cartesian_interface_LIBRARIES}					  
 					  ifopt::ifopt_ipopt)
 
 #############

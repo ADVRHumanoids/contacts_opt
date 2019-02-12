@@ -1,11 +1,10 @@
-solver_options:
-    regularization: 1e-6
-    back_end: "qpoases"
 
 stack:
     - ["Wheel_FL", "Wheel_FR", "Wheel_HR", "Wheel_HL"]
-    - ["Com"]
+    #- ["Hankle_FL", "Hankle_FR", "Hankle_HR", "Hankle_HL"]
+    - ["Com", "LeftArm", "RightArm"]
     - ["Postural"]
+    
 constraints: ["JointLimits", "VelocityLimits"]
 
 Wheel_FL:
@@ -28,14 +27,40 @@ Wheel_HR:
     distal_link: "wheel_4"
     indices: [0, 1, 2]
     
+Hankle_FL:
+    type: "Cartesian"
+    distal_link: "ankle2_1"
+    indices: [3, 4, 5]
+    lambda: 0.05
+
+Hankle_FR:
+    type: "Cartesian"
+    distal_link: "ankle2_2"
+    indices: [3, 4, 5]
+    lambda: 0.05
+    
+Hankle_HL:
+    type: "Cartesian"
+    distal_link: "ankle2_3"
+    indices: [3, 4, 5]
+    lambda: 0.05
+    
+Hankle_HR:
+    type: "Cartesian"
+    distal_link: "ankle2_4"
+    indices: [3, 4, 5]
+    lambda: 0.05
+    
 LeftArm:
     type: "Cartesian"
     distal_link: "arm1_8"
+    base_link: "pelvis"
     lambda: 0.1
 
 RightArm:
     type: "Cartesian"
     distal_link: "arm2_8"
+    base_link: "pelvis"
     lambda: 0.1
     
 Com:
