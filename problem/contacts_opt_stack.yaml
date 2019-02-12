@@ -1,9 +1,12 @@
+solver_options:
+regularization: 1e-6
+back_end: "qpoases"
+
 
 stack:
     - ["Wheel_FL", "Wheel_FR", "Wheel_HR", "Wheel_HL"]
-    #- ["Hankle_FL", "Hankle_FR", "Hankle_HR", "Hankle_HL"]
     - ["Com", "LeftArm", "RightArm"]
-    - ["Postural"]
+    - ["Postural", "Hankle_FL", "Hankle_FR", "Hankle_HR", "Hankle_HL"]
     
 constraints: ["JointLimits", "VelocityLimits"]
 
@@ -30,26 +33,34 @@ Wheel_HR:
 Hankle_FL:
     type: "Cartesian"
     distal_link: "ankle2_1"
+    body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
+    weight: 10.0
 
 Hankle_FR:
     type: "Cartesian"
     distal_link: "ankle2_2"
+    body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
+    weight: 10.0
     
 Hankle_HL:
     type: "Cartesian"
     distal_link: "ankle2_3"
+    body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
+    weight: 10.0
     
 Hankle_HR:
     type: "Cartesian"
     distal_link: "ankle2_4"
+    body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
+    weight: 10.0
     
 LeftArm:
     type: "Cartesian"
@@ -65,18 +76,24 @@ RightArm:
     
 Com:
     type: "Com"
-    lambda: 0.1
+    lambda: 1
     weight: 10
+    
+Pelvis:
+    type: "Cartesian"
+    distal_link: "pelvis"
+    indices: [3, 4, 5]
+    lambda: 0.1    
     
 Postural:
     type: "Postural"
     lambda: 0.01
     weight:
-    VIRTUALJOINT_1: 0.0
-    VIRTUALJOINT_2: 0.0
-    VIRTUALJOINT_3: 0.0
-    VIRTUALJOINT_4: 0.0
-    VIRTUALJOINT_5: 0.0
-    VIRTUALJOINT_6: 0.0
+      VIRTUALJOINT_1: 0.0
+      VIRTUALJOINT_2: 0.0
+      VIRTUALJOINT_3: 0.0
+      VIRTUALJOINT_4: 0.0
+      VIRTUALJOINT_5: 0.0
+      VIRTUALJOINT_6: 0.0
 
     

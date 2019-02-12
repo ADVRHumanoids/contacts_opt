@@ -27,8 +27,7 @@ find_package(ReflexxesTypeII REQUIRED)
 find_package(catkin REQUIRED COMPONENTS roscpp
                                         std_msgs
                                         geometry_msgs
-                                        sensor_msgs
-                                        tf)
+                                        sensor_msgs)
                                         
                                         
 catkin_package(

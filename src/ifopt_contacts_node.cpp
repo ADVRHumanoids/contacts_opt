@@ -10,8 +10,6 @@
 #include <ifopt/ipopt_solver.h>
 #include <ifopt_problem/ifopt_contacts.h>
 
-#include <tf/transform_broadcaster.h>
-#include <turtlesim/Pose.h>
 
 using namespace XBot;
 using namespace XBot::Cartesian;
@@ -50,7 +48,41 @@ int main(int argc, char **argv)
     
     if(log)
         logger = XBot::MatLogger::getLogger(ss.str());
-        
+    
+    Eigen::Vector3d com_ref;
+    com_ref.setZero();  
+    model->getCOM(com_ref);   
+    
+    Eigen::Affine3d pose;
+    
+    model->getPose("wheel_1",pose);  
+    Eigen::Vector3d wheel_1 = pose.translation();
+    
+    model->getPose("wheel_2",pose);  
+    Eigen::Vector3d wheel_2 = pose.translation();
+    
+    model->getPose("wheel_3",pose);  
+    Eigen::Vector3d wheel_3 = pose.translation();
+    
+    model->getPose("wheel_4",pose);  
+    Eigen::Vector3d wheel_4 = pose.translation();
+    
+    model->getPose("pelvis",pose);  
+    Eigen::Vector3d pelvis = pose.translation();
+    
+    Eigen::Vector3d C, R, P; 
+    C << 20.0, pelvis.y(), pelvis.z();
+    R <<  C.x() + 2*wheel_1.x() , 20.0,  pelvis.z()-wheel_1.z();
+    P << 20.0, 20.0, 20.0; 
+    
+    Eigen::VectorXd p_ref; p_ref.setZero(12);
+    
+    p_ref.head(3) = wheel_1;
+    p_ref.segment<3>(3) = wheel_2;
+    p_ref.segment<3>(6) = wheel_3;
+    p_ref.tail(3) = wheel_4;
+  
+    
     Problem nlp;
     IpoptSolver ipopt; ipopt.SetOption("derivative_test", "first-order");  
     Eigen::VectorXd x_opt; x_opt.setZero(39);
@@ -60,27 +92,11 @@ int main(int argc, char **argv)
     Eigen::VectorXd com_opt; x_opt.setZero(3);
     
     Eigen::VectorXd ext_w; ext_w.setZero(6); ext_w << 90, 0, 0, 0, 0, 0.0;
+    
     Eigen::Vector3d F_max; F_max.setOnes(); F_max *= 100;
     
-    Eigen::Vector3d C, R, P; 
-    C <<  1.5,  0.0,  1.0;
-    R <<  2.0, 20.0,  1.0;
-    P << 20.0, 20.0, 20.0; 
-    
     double mu = 0.2;
-    
-    Eigen::VectorXd p_ref;
-    p_ref.setZero(12);
-    p_ref <<  0.25, -0.3, 0.0, 
-	      0.25,  0.3, 0.0, 
-	     -0.25, -0.3, 0.0, 
-	     -0.25,  0.3, 0.0;
-	     
     double Wp = 10;
-	     
-    Eigen::Vector3d com_ref;
-    com_ref.setZero();
-    
     double Wcom = 100;
        
     auto p1 = std::make_shared<ExVariables>("p1");
@@ -119,13 +135,13 @@ int main(int argc, char **argv)
 	  
     auto cost = std::make_shared<ExCost>();	    
     
-    std::vector<std::string> feet = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
+    std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
     std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
 	    
-    nlp.AddVariableSet(p1); p1->SetBounds(Eigen::Vector3d( 0.4,  0.2, 0.0),Eigen::Vector3d( 2.0,  1.0, 0.4));
-    nlp.AddVariableSet(p2); p2->SetBounds(Eigen::Vector3d( 0.4, -1.0, 0.0),Eigen::Vector3d( 2.0, -0.2, 0.4));
-    nlp.AddVariableSet(p3); p3->SetBounds(Eigen::Vector3d(-2.0,  0.2, 0.0),Eigen::Vector3d(-0.2,  1.0, 0.4));
-    nlp.AddVariableSet(p4); p4->SetBounds(Eigen::Vector3d(-2.0, -1.0, 0.0),Eigen::Vector3d(-0.2, -0.2, 0.4));
+    nlp.AddVariableSet(p1); p1->SetBounds(wheel_1 - Eigen::Vector3d( 0.0,  0.3, 0.0), wheel_1 + Eigen::Vector3d( 0.3, 0.0, 0.5));
+    nlp.AddVariableSet(p2); p2->SetBounds(wheel_2 - Eigen::Vector3d( 0.0,  0.0, 0.0), wheel_2 + Eigen::Vector3d( 0.3, 0.3, 0.5));
+    nlp.AddVariableSet(p3); p3->SetBounds(wheel_3 - Eigen::Vector3d( 0.3,  0.3, 0.0), wheel_3 + Eigen::Vector3d( 0.0, 0.0, 0.5));
+    nlp.AddVariableSet(p4); p4->SetBounds(wheel_4 - Eigen::Vector3d( 0.3,  0.0, 0.0), wheel_4 + Eigen::Vector3d( 0.0, 0.3, 0.5));
       
     nlp.AddVariableSet(F1); F1->SetBounds(-F_max,F_max);
     nlp.AddVariableSet(F2); F2->SetBounds(-F_max,F_max);
@@ -157,13 +173,6 @@ int main(int argc, char **argv)
     n_p4->SetParam(C,R,P); nlp.AddConstraintSet(n_p4); 
 	    
     cost->SetPosRef(p_ref, Wp);
-    
-    model->getCOM(com_ref);   
-    
-    Eigen::Affine3d foot_pose;
-    model->getPose("wheel_1",foot_pose);
-    Eigen::Vector3d foot = foot_pose.translation();
-    com_ref.z() -= foot.z();
     
     cost->SetCOMRef(com_ref, Wcom);
         
@@ -219,16 +228,52 @@ int main(int argc, char **argv)
 	w_T_f.translation() = pi;
 	
 	ci.setTargetPose(feet[i], w_T_f, 5.0);
+// 	ci.waitReachCompleted(feet[i]);
 	
 	Eigen::Affine3d a_T_f;
 	a_T_f.translation() = ni;
 	a_T_f.linear() =  R.transpose();
 	
-// 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+// 	ci.waitReachCompleted(ankle[i]);
 
     }
     
-   // TODO sequential foot lifting
+//     for(int i : {0, 1, 2, 3})
+//     {
+// 	
+//         Eigen::Vector3d pi = p_opt.segment<3>(3*i);
+// 	
+// 	Eigen::Vector3d ni = - n_opt.segment<3>(3*i);	
+// 		
+// 	Eigen::Matrix3d R; R.setZero();
+//                  
+//         R.coeffRef(0, 0) =  ni.y()/((ni.head(2)).norm()); 
+//         R.coeffRef(0, 1) = -ni.x()/((ni.head(2)).norm());  
+//         
+//         R.coeffRef(1, 0) =  (ni.x()*ni.z())/((ni.head(2)).norm());  
+//         R.coeffRef(1, 1) =  (ni.y()*ni.z())/((ni.head(2)).norm());  
+//         R.coeffRef(1, 2) = -(ni.head(2)).norm();  
+//         
+//         R.coeffRef(2, 0) = ni.x();  
+//         R.coeffRef(2, 1) = ni.y();  
+//         R.coeffRef(2, 2) = ni.z(); 
+// 
+// 	
+// 	Eigen::Affine3d w_T_f;
+// 	w_T_f.translation() = pi;
+// 	
+// 	ci.setTargetPose(feet[i], w_T_f, 5.0);
+//  	ci.waitReachCompleted(feet[i]);
+// 	
+// 	Eigen::Affine3d a_T_f;
+// 	a_T_f.translation() = ni;
+// 	a_T_f.linear() =  R.transpose();
+// 	
+// // 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+// // 	ci.waitReachCompleted(ankle[i]);
+// 
+//     }
     
     while(ros::ok())
     {	
@@ -237,7 +282,7 @@ int main(int argc, char **argv)
     }
     
     if(log)
-        logger->flush();
+	 logger->flush();
     
     return 0;
 }
