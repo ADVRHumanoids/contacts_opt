@@ -33,7 +33,7 @@ Wheel_HR:
 Hankle_FL:
     type: "Cartesian"
     distal_link: "ankle2_1"
-    body_jacobian: true
+    #body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
     weight: 10.0
@@ -41,7 +41,7 @@ Hankle_FL:
 Hankle_FR:
     type: "Cartesian"
     distal_link: "ankle2_2"
-    body_jacobian: true
+    #body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
     weight: 10.0
@@ -49,7 +49,7 @@ Hankle_FR:
 Hankle_HL:
     type: "Cartesian"
     distal_link: "ankle2_3"
-    body_jacobian: true
+    #body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
     weight: 10.0
@@ -57,7 +57,7 @@ Hankle_HL:
 Hankle_HR:
     type: "Cartesian"
     distal_link: "ankle2_4"
-    body_jacobian: true
+    #body_jacobian: true
     indices: [3, 4, 5]
     lambda: 0.05
     weight: 10.0

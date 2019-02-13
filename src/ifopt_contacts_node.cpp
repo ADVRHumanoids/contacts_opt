@@ -79,6 +79,9 @@ int main(int argc, char **argv)
     R <<  C.x() + 2*wheel_1.x() , 20.0,  pelvis.z()-wheel_1.z();
     P << 20.0, 20.0, 20.0; 
     
+    std::cout<< "C: " << C.transpose() << std::endl;
+    std::cout<< "R: " << R.transpose() << std::endl;
+    
     Eigen::VectorXd p_ref; p_ref.setZero(12);
     
     p_ref.head(3) = wheel_1;
@@ -180,9 +183,7 @@ int main(int argc, char **argv)
     
     cost->SetCOMRef(com_ref, Wcom);
         
-    nlp.AddCostSet(cost);
-     
-//     com->SetBounds(Eigen::Vector3d(-2.0, -1.0, 0.5),Eigen::Vector3d( 0.3, 1.0, 1.0));
+    nlp.AddCostSet(cost);  
     
     ipopt.Solve(nlp);	
     x_opt = nlp.GetOptVariables()->GetValues(); 
@@ -194,18 +195,21 @@ int main(int argc, char **argv)
 	
     if(log)
     {
-	logger->add("q", q);
 	logger->add("x_sol", x_opt);
 	logger->add("com_ref", com_ref);
+	logger->add("p_ref", p_ref);
 	logger->add("com", com_opt);
 	logger->add("p", p_opt);
 	logger->add("F", F_opt);
 	logger->add("n", n_opt);
     }
     
+    
+/* Simultaneous foot lift  */
+    
     Eigen::Affine3d w_T_com;
     w_T_com.translation() = com_opt;
-    ci.setTargetPose("com", w_T_com, 5.0);   
+//     ci.setTargetPose("com", w_T_com, 5.0);   
        
     for(int i : {0, 1, 2, 3})
     {
@@ -231,52 +235,97 @@ int main(int argc, char **argv)
 	Eigen::Affine3d w_T_f;
 	w_T_f.translation() = pi;
 	
-	ci.setTargetPose(feet[i], w_T_f, 5.0);
+// 	ci.setTargetPose(feet[i], w_T_f, 5.0);
 	
 	Eigen::Affine3d a_T_f;
 	a_T_f.translation() = ni;
 	a_T_f.linear() =  R.transpose();
 	
-	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+// 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
 
     }
     
-//     for(int i : {0, 1, 2, 3})
-//     {
-// 	
-//         Eigen::Vector3d pi = p_opt.segment<3>(3*i);
-// 	
-// 	Eigen::Vector3d ni = - n_opt.segment<3>(3*i);	
-// 		
-// 	Eigen::Matrix3d R; R.setZero();
-//                  
-//         R.coeffRef(0, 0) =  ni.y()/((ni.head(2)).norm()); 
-//         R.coeffRef(0, 1) = -ni.x()/((ni.head(2)).norm());  
-//         
-//         R.coeffRef(1, 0) =  (ni.x()*ni.z())/((ni.head(2)).norm());  
-//         R.coeffRef(1, 1) =  (ni.y()*ni.z())/((ni.head(2)).norm());  
-//         R.coeffRef(1, 2) = -(ni.head(2)).norm();  
-//         
-//         R.coeffRef(2, 0) = ni.x();  
-//         R.coeffRef(2, 1) = ni.y();  
-//         R.coeffRef(2, 2) = ni.z(); 
-// 
-// 	
-// 	Eigen::Affine3d w_T_f;
-// 	w_T_f.translation() = pi;
-// 	
-// 	ci.setTargetPose(feet[i], w_T_f, 5.0);
-//  	ci.waitReachCompleted(feet[i]);
-// 	
-// 	Eigen::Affine3d a_T_f;
-// 	a_T_f.translation() = ni;
-// 	a_T_f.linear() =  R.transpose();
-// 	
-// // 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
-// // 	ci.waitReachCompleted(ankle[i]);
-// 
-//     }
+    std::vector< Eigen::VectorXd > x_opt_legs(4, Eigen::VectorXd::Zero(39));
+    std::vector< Eigen::VectorXd > p_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > F_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > n_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > com_opt_legs(4, Eigen::VectorXd::Zero(3));
     
+    std::vector < std::shared_ptr<ExVariables> > F{F1, F2, F3, F4};
+    std::vector < std::shared_ptr<ExVariables> > p{p1, p2, p3, p4};
+
+    ext_w.setZero();	
+    static_constr->SetExternalWrench(ext_w);
+    
+/* Sequential foot lift  */
+    
+    for(int i : {0, 1 , 2, 3})
+    {
+	
+	cost->SetPosRef(p_ref, 100);
+            
+	cost->SetCOMRef(com_ref, 10);
+	    
+	F_max.setOnes(); F_max *= 1e-2;	    
+	F[i]->SetBounds(-F_max,F_max);
+	
+	p[i]->SetBounds(p_opt.segment<3>(3*i),p_opt.segment<3>(3*i));
+	
+	ipopt.Solve(nlp);	
+        x_opt_legs[i] = nlp.GetOptVariables()->GetValues(); 
+    
+        p_opt_legs[i] = x_opt_legs[i].head(12);
+        F_opt_legs[i] = x_opt_legs[i].segment<12>(12);
+        n_opt_legs[i] = x_opt_legs[i].segment<12>(24);
+        com_opt_legs[i] =  x_opt_legs[i].tail(3);
+
+	F_max.setOnes(); F_max *= 100;
+	F[i]->SetBounds(-F_max,F_max);	
+	
+	Eigen::Vector3d pi = p_opt_legs[i].segment<3>(3*i);
+	
+	Eigen::Vector3d ni = - n_opt_legs[i].segment<3>(3*i);	
+		
+	Eigen::Matrix3d R; R.setZero();
+                 
+        R.coeffRef(0, 0) =  ni.y()/((ni.head(2)).norm()); 
+        R.coeffRef(0, 1) = -ni.x()/((ni.head(2)).norm());  
+        
+        R.coeffRef(1, 0) =  (ni.x()*ni.z())/((ni.head(2)).norm());  
+        R.coeffRef(1, 1) =  (ni.y()*ni.z())/((ni.head(2)).norm());  
+        R.coeffRef(1, 2) = -(ni.head(2)).norm();  
+        
+        R.coeffRef(2, 0) = ni.x();  
+        R.coeffRef(2, 1) = ni.y();  
+        R.coeffRef(2, 2) = ni.z(); 
+
+	Eigen::Affine3d w_T_com;
+	w_T_com.translation() = com_opt_legs[i];
+	ci.setTargetPose("com", w_T_com, 5.0); 	
+	ci.waitReachCompleted("com");
+	
+	Eigen::Affine3d w_T_f;
+	w_T_f.translation() = pi;	
+	ci.setTargetPose(feet[i], w_T_f, 5.0);
+	ci.waitReachCompleted(feet[i]);
+	
+	Eigen::Affine3d a_T_f;
+	a_T_f.translation() = ni;
+	a_T_f.linear() =  R.transpose();	
+	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+	ci.waitReachCompleted(ankle[i]);
+		
+	if(log)
+	{
+	  logger->add("x_sol", x_opt_legs[i]);
+	  logger->add("com", com_opt_legs[i]);
+	  logger->add("p", p_opt_legs[i]);
+	  logger->add("F", F_opt_legs[i]);
+	  logger->add("n", n_opt_legs[i]);
+	}
+	
+    }
+   
     while(ros::ok())
     {	
 	ros::spinOnce();
