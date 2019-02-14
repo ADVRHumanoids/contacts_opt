@@ -89,6 +89,7 @@ public:
     {
         _W_p = 0;
 	_W_com = 0;
+	_W_force = 1;
         _p_ref.setZero(12);
 	_com_ref.setZero();
     }
@@ -107,6 +108,12 @@ public:
         _com_ref = com_ref;
     }
     
+    void SetForceRef(const double& W_force)
+    {
+        _W_force = W_force; 
+    }
+    
+    
     
     double GetCost() const override
     {
@@ -118,7 +125,7 @@ public:
                 Eigen::Vector3d Fi = GetVariables()->GetComponent("F" + std::to_string(i))->GetValues();
                 Eigen::Vector3d pi = GetVariables()->GetComponent("p" + std::to_string(i))->GetValues();
                 
-                value += 0.5*_W_p*(pi -_p_ref.segment(3*(i-1),3)).squaredNorm() + 0.5*Fi.squaredNorm();
+                value += 0.5*_W_p*(pi -_p_ref.segment(3*(i-1),3)).squaredNorm() + 0.5*_W_force*Fi.squaredNorm();
             } 
             
             Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
@@ -137,9 +144,9 @@ public:
             {
                 Eigen::Vector3d Fi = GetVariables()->GetComponent("F" + std::to_string(i+1))->GetValues();
                 
-                jac.coeffRef(0, 0) = Fi.x();
-                jac.coeffRef(0, 1) = Fi.y();
-                jac.coeffRef(0, 2) = Fi.z();
+                jac.coeffRef(0, 0) = _W_force*Fi.x();
+                jac.coeffRef(0, 1) = _W_force*Fi.y();
+                jac.coeffRef(0, 2) = _W_force*Fi.z();
                 
             }
             
@@ -167,7 +174,7 @@ public:
 
 private:
 
-   double _W_p, _W_com;
+   double _W_p, _W_com, _W_force;
    Eigen::VectorXd _p_ref;
    Eigen::Vector3d _com_ref;
 
@@ -183,7 +190,7 @@ public:
     StaticConstraint() : ConstraintSet(6, "StaticConstraint")
     {
         _wrench_ext.setZero();
-        _mg << 0.0, 0.0, -100;
+        _mg << 0.0, 0.0, -1000;
     }
 
     // The constraint value minus the constant value "1", moved to bounds.
@@ -383,6 +390,7 @@ public:
         fname_(force_name)
     {
         mu_= 1; 
+	_F_thr = 0;
 
     }
     
@@ -393,7 +401,12 @@ public:
 
     }
     
+    void set_F_thr(const double& F_thr)
+    {
+        _F_thr = F_thr;
 
+    }
+    
 
     VectorXd GetValues() const override
     {
@@ -414,7 +427,7 @@ public:
                        
             Eigen::Vector3d  n_SE = GetVariables()->GetComponent("n" + std::to_string(k))->GetValues();
             
-            value(0) = -F.dot(n_SE); 
+            value(0) = -F.dot(n_SE) + _F_thr; 
             value(1) = (F-(n_SE.dot(F))*n_SE).norm() - mu_*(F.dot(n_SE));            
                   
 //             std::cout <<"value " << value.transpose() << std::endl;        
@@ -500,7 +513,7 @@ public:
     
 private:
     
-  double mu_;
+  double mu_, _F_thr;
   std::string fname_;
     
 };

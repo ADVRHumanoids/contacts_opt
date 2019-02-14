@@ -6,7 +6,7 @@ back_end: "qpoases"
 stack:
     - ["Wheel_FL", "Wheel_FR", "Wheel_HR", "Wheel_HL"]
     - ["Com", "LeftArm", "RightArm"]
-    - ["Postural", "Hankle_FL", "Hankle_FR", "Hankle_HR", "Hankle_HL"]
+    - ["Postural", "Hankle_FL", "Hankle_FR", "Hankle_HR", "Hankle_HL", "Pelvis"]
     
 constraints: ["JointLimits", "VelocityLimits"]
 
@@ -76,14 +76,15 @@ RightArm:
     
 Com:
     type: "Com"
-    lambda: 1
+    lambda: 0.1
     weight: 10
     
 Pelvis:
     type: "Cartesian"
     distal_link: "pelvis"
     indices: [3, 4, 5]
-    lambda: 0.1    
+    lambda: 0.05  
+    weight: 10.0
     
 Postural:
     type: "Postural"
