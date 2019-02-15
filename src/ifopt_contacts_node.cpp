@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 
 
     Eigen::Affine3d pose;
-
+    
     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
     pose.translation().z() -= 0.1;
     Eigen::Vector3d com_ref = pose.translation();
@@ -73,13 +73,12 @@ int main(int argc, char **argv)
     Eigen::Vector3d wheel_4 = pose.translation();
     wheel_4.y() =  pelvis.y() - 0.35;
 
-
     double ground_z = wheel_1.z();
 
     Eigen::Vector3d C, R, P;
     C << pelvis.x() + 20.0, pelvis.y(), pelvis.z();
     R <<  C.x() + 0.6 , 20.0, pelvis.z() - ground_z;
-    P << 20.0, 20.0, 20.0;
+    P << 20, 20, 20;
 
     if (log) {
         logger->add("C", C);
@@ -99,6 +98,7 @@ int main(int argc, char **argv)
     Problem nlp;
     IpoptSolver ipopt;
     ipopt.SetOption("derivative_test", "first-order");
+    
     Eigen::VectorXd x_opt;
     x_opt.setZero(39);
     Eigen::VectorXd p_opt;
@@ -112,15 +112,13 @@ int main(int argc, char **argv)
 
     Eigen::VectorXd ext_w;
     ext_w.setZero(6);
-    ext_w << 900, 0, 0, 0, 0, 0.0;
+    ext_w << 1000, 0, 0, 0, 0, 0.0;
 
     Eigen::Vector3d F_max;
     F_max.setOnes();
     F_max *= 500;
 
     double mu = 0.5;
-    double Wp = 10;
-    double Wcom = 100;
 
     auto p1 = std::make_shared<ExVariables> ("p1");
     auto p2 = std::make_shared<ExVariables> ("p2");
@@ -166,10 +164,10 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(p3);
     nlp.AddVariableSet(p4);
 
-    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0), wheel_1 + Eigen::Vector3d(0.5, 0.5, 0.5));
-    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, 0.5, 0.0), wheel_2 + Eigen::Vector3d(0.5, 0.0, 0.5));
-    p3->SetBounds(wheel_3 - Eigen::Vector3d(0.5, 0.0, 0.0), wheel_3 + Eigen::Vector3d(0.0, 0.5, 0.5));
-    p4->SetBounds(wheel_4 - Eigen::Vector3d(0.5, 0.5, 0.0), wheel_4 + Eigen::Vector3d(0.0, 0.0, 0.5));
+    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0), wheel_1 + Eigen::Vector3d(0.3, 0.3, 0.3));
+    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, 0.3, 0.0), wheel_2 + Eigen::Vector3d(0.3, 0.0, 0.3));
+    p3->SetBounds(wheel_3 - Eigen::Vector3d(0.3, 0.0, 0.0), wheel_3 + Eigen::Vector3d(0.0, 0.3, 0.3));
+    p4->SetBounds(wheel_4 - Eigen::Vector3d(0.3, 0.3, 0.0), wheel_4 + Eigen::Vector3d(0.0, 0.0, 0.3));
 
     nlp.AddVariableSet(F1);
     F1->SetBounds(-F_max, F_max);
@@ -186,6 +184,7 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(n4);
 
     nlp.AddVariableSet(com);
+//     com->SetBounds(com_ref - 0.2*Eigen::Vector3d::Ones(), com_ref + 0.2*Eigen::Vector3d::Ones());
 
     static_constr->SetExternalWrench(ext_w);
     nlp.AddConstraintSet(static_constr);
@@ -217,8 +216,11 @@ int main(int argc, char **argv)
     n_p4->SetParam(C, R, P);
     nlp.AddConstraintSet(n_p4);
 
+    
+    double Wp = 10;
     cost->SetPosRef(p_ref, Wp);
-
+    
+    double Wcom = 100;
     cost->SetCOMRef(com_ref, Wcom);
 
     nlp.AddCostSet(cost);
@@ -232,13 +234,14 @@ int main(int argc, char **argv)
     com_opt =  x_opt.tail(3);
 
     if (log) {
-        logger->add("x_sol", x_opt);
         logger->add("com_ref", com_ref);
         logger->add("p_ref", p_ref);
-        logger->add("com", com_opt);
-        logger->add("p", p_opt);
-        logger->add("F", F_opt);
-        logger->add("n", n_opt);
+        logger->add("F_ref", ext_w.head(3));
+        logger->add("x_sol_initial", x_opt);
+        logger->add("com_initial", com_opt);
+        logger->add("p_initial", p_opt);
+        logger->add("F_initial", F_opt);
+        logger->add("n_initial", n_opt);
     }
 
 
@@ -248,9 +251,8 @@ int main(int argc, char **argv)
     w_T_com.translation() = com_opt;
 //     ci.setTargetPose("com", w_T_com, 5.0);
 
-    for (int i : {
-                0, 1, 2, 3
-            }) {
+    for (int i : {0, 1, 2, 3}) 
+    {
 
         Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
 
@@ -328,19 +330,18 @@ int main(int argc, char **argv)
     nlp_legs.AddConstraintSet(fr_F3);
     nlp_legs.AddConstraintSet(fr_F4);
 
-    std::vector< Eigen::VectorXd > x_opt_legs(4, Eigen::VectorXd::Zero(39));
-    std::vector< Eigen::VectorXd > p_opt_legs(4, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > F_opt_legs(4, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > n_opt_legs(4, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > com_opt_legs(4, Eigen::VectorXd::Zero(3));
+    std::vector< Eigen::VectorXd > x_opt_legs(5, Eigen::VectorXd::Zero(39));
+    std::vector< Eigen::VectorXd > p_opt_legs(5, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > F_opt_legs(5, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > n_opt_legs(5, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > com_opt_legs(5, Eigen::VectorXd::Zero(3));
 
     std::vector < std::shared_ptr<ExVariables> > F {F1, F2, F3, F4};
     std::vector < std::shared_ptr<FrictionConstraint> > fr_F {fr_F1, fr_F2, fr_F3, fr_F4};
     std::vector < std::shared_ptr<ExVariables> > p {p1, p2, p3, p4};
     std::vector < std::shared_ptr<ExVariables> > n {n1, n2, n3, n4};
 
-    ext_w.setZero();
-    static_constr->SetExternalWrench(ext_w);
+    static_constr->SetExternalWrench( Eigen::VectorXd::Zero(6));
     nlp_legs.AddConstraintSet(static_constr);
 
 
@@ -351,14 +352,13 @@ int main(int argc, char **argv)
     p3->SetBounds(p_ref.segment<3> (6), p_ref.segment<3> (6));
     p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
 
-    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-
     com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
 
-    for (int i : {0, 1, 2, 3}) {
+    for (int i : {0, 1, 2, 3}) 
+    {
 
         cost->SetPosRef(p_ref, 0);
-        cost->SetCOMRef(com_ref, 10);
+        cost->SetCOMRef(com_ref, 1);
         cost->SetForceRef(0);
 
         F_max *= 0;
@@ -383,6 +383,11 @@ int main(int argc, char **argv)
         fr_F[i]->set_F_thr(F_thr);
 
         Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
+        
+        if ((pi.z() - ground_z) <= 0.015)
+        {
+            pi.z() = ground_z;
+        }
 
         p[i]->SetBounds(pi, pi);
 
@@ -411,6 +416,7 @@ int main(int argc, char **argv)
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;
+        w_T_f1.translation().x() += 0.08;
         w_T_f1.translation().z() += 0.1;
 
         Eigen::Affine3d w_T_f2;
@@ -428,18 +434,54 @@ int main(int argc, char **argv)
         ci.waitReachCompleted(ankle[i]);
 
         if (log) {
-            logger->add("x_sol_legs", x_opt_legs[i]);
-            logger->add("com_legs", com_opt_legs[i]);
-            logger->add("p_legs", p_opt_legs[i]);
-            logger->add("F_legs", F_opt_legs[i]);
-            logger->add("n_legs", n_opt_legs[i]);
+            logger->add("x_sol_lift", x_opt_legs[i]);
+            logger->add("com_lift", com_opt_legs[i]);
+            logger->add("p_lift", p_opt_legs[i]);
+            logger->add("F_lift", F_opt_legs[i]);
+            logger->add("n_lift", n_opt_legs[i]);
         }
 
     }
+    
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
+//     pose.translation().x() += 0.1;
+    ci.setBaseLink("arm1_8", "world");
+    ci.setTargetPose("arm1_8", pose, 2.0);
+    
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
+//     pose.translation().x() += 0.1;
+    ci.setBaseLink("arm2_8", "world");
+    ci.setTargetPose("arm2_8", pose, 2.0);
+    ci.waitReachCompleted("arm2_8");
 
-    /* Move CoM for Pushing */
-
-//     ci.setTargetPose("com", w_T_com, 5.0);
+    /* Move CoM for Pushing */    
+    static_constr->SetExternalWrench(ext_w);
+    
+    ipopt.Solve(nlp_legs);
+    x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
+    
+    p_opt_legs[4] = x_opt_legs[4].head(12);
+    F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
+    n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
+    com_opt_legs[4] =  x_opt_legs[4].tail(3);
+    
+    w_T_com.translation() = com_opt_legs[4];
+    ci.setTargetPose("com", w_T_com, 5.0);
+    ci.waitReachCompleted("com");
+    
+    if (log) {
+        logger->add("x_sol_final", x_opt_legs[4]);
+        logger->add("com_final", com_opt_legs[4]);
+        logger->add("p_final", p_opt_legs[4]);
+        logger->add("F_final", F_opt_legs[4]);
+        logger->add("n_final", n_opt_legs[4]);
+    }
+    
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
+    ci.setBaseLink("arm1_8", "pelvis");
+   
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
+    ci.setBaseLink("arm2_8", "pelvis");
 
 
     while (ros::ok()) {
