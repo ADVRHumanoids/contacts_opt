@@ -56,29 +56,44 @@ int main(int argc, char **argv)
 
     ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
     Eigen::Vector3d pelvis = pose.translation();
+    
+    double wheel_offset_y = 0.35;
 
     ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
     Eigen::Vector3d wheel_1 = pose.translation();
-    wheel_1.y() =  pelvis.y() + 0.35;
+    wheel_1.y() =  pelvis.y() + wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
     Eigen::Vector3d wheel_2 = pose.translation();
-    wheel_2.y() =  pelvis.y() - 0.35;
+    wheel_2.y() =  pelvis.y() - wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
     Eigen::Vector3d wheel_3 = pose.translation();
-    wheel_3.y() =  pelvis.y() + 0.35;
+    wheel_3.y() =  pelvis.y() + wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
     Eigen::Vector3d wheel_4 = pose.translation();
-    wheel_4.y() =  pelvis.y() - 0.35;
+    wheel_4.y() =  pelvis.y() - wheel_offset_y;
+    
+    Eigen::Affine3d pose_arm1_8, pose_arm2_8;
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose_arm1_8);       
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose_arm2_8);
 
     double ground_z = wheel_1.z();
 
+/* Environment super-ellipsoid parameters*/ 
     Eigen::Vector3d C, R, P;
-    C << pelvis.x() + 20.0, pelvis.y(), pelvis.z();
-    R <<  C.x() + 0.6 , 20.0, pelvis.z() - ground_z;
-    P << 20, 20, 20;
+    
+    C << pelvis.x() + 20.0, 
+         pelvis.y(), 
+         pelvis.z();
+         
+    R << C.x() + 0.6, 
+         20.0, 
+         pelvis.z() - ground_z;
+    
+//     P << 20, 20, 20; 
+    P << 20, 20, 18;
 
     if (log) {
         logger->add("C", C);
@@ -86,6 +101,7 @@ int main(int argc, char **argv)
         logger->add("P", P);
     }
 
+/* Initial desired wheel position on the ground*/
     Eigen::VectorXd p_ref;
     p_ref.setZero(12);
 
@@ -164,10 +180,12 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(p3);
     nlp.AddVariableSet(p4);
 
-    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0), wheel_1 + Eigen::Vector3d(0.3, 0.3, 0.3));
-    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, 0.3, 0.0), wheel_2 + Eigen::Vector3d(0.3, 0.0, 0.3));
-    p3->SetBounds(wheel_3 - Eigen::Vector3d(0.3, 0.0, 0.0), wheel_3 + Eigen::Vector3d(0.0, 0.3, 0.3));
-    p4->SetBounds(wheel_4 - Eigen::Vector3d(0.3, 0.3, 0.0), wheel_4 + Eigen::Vector3d(0.0, 0.0, 0.3));
+    double delta = 0.3;
+    
+    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),     wheel_1 + Eigen::Vector3d(delta, delta, delta));
+    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta, 0.0),   wheel_2 + Eigen::Vector3d(delta, 0.0, delta));
+    p3->SetBounds(wheel_3 - Eigen::Vector3d(delta, 0.0, 0.0),   wheel_3 + Eigen::Vector3d(0.0, delta, delta));
+    p4->SetBounds(wheel_4 - Eigen::Vector3d(delta, delta, 0.0), wheel_4 + Eigen::Vector3d(0.0, 0.0, delta));
 
     nlp.AddVariableSet(F1);
     F1->SetBounds(-F_max, F_max);
@@ -245,7 +263,7 @@ int main(int argc, char **argv)
     }
 
 
-    /* Simultaneous foot lift  */
+/* Simultaneous foot lift  */
 
     Eigen::Affine3d w_T_com;
     w_T_com.translation() = com_opt;
@@ -286,7 +304,7 @@ int main(int argc, char **argv)
 
     }
 
-    /* Sequential foot lift - Balancing */
+/* Sequential foot lift - Balancing */
 
     Problem nlp_legs;
 
@@ -361,12 +379,14 @@ int main(int argc, char **argv)
         cost->SetCOMRef(com_ref, 1);
         cost->SetForceRef(0);
 
+        // No force on the lifting leg 
         F_max *= 0;
         F[i]->SetBounds(-F_max, F_max);
 
         fr_F[i]->set_F_thr(0);
-
-        p[i]->SetBounds(- Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
+        
+        // No position bound on the lifting leg
+        p[i]->SetBounds(-Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
 
         ipopt.Solve(nlp_legs);
         x_opt_legs[i] = nlp_legs.GetOptVariables()->GetValues();
@@ -382,6 +402,7 @@ int main(int argc, char **argv)
 
         fr_F[i]->set_F_thr(F_thr);
 
+        // Put wheel on the ground, if super-ellipsoid is close to the ground 
         Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
         
         if ((pi.z() - ground_z) <= 0.015)
@@ -443,18 +464,16 @@ int main(int argc, char **argv)
 
     }
     
-    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
-//     pose.translation().x() += 0.1;
+    pose_arm1_8.translation().x() += 0.15;
     ci.setBaseLink("arm1_8", "world");
-    ci.setTargetPose("arm1_8", pose, 2.0);
+    ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
     
-    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
-//     pose.translation().x() += 0.1;
+    pose_arm2_8.translation().x() += 0.15;
     ci.setBaseLink("arm2_8", "world");
-    ci.setTargetPose("arm2_8", pose, 2.0);
+    ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
     ci.waitReachCompleted("arm2_8");
 
-    /* Move CoM for Pushing */    
+/* Move CoM to initial CoM for pushing */    
     static_constr->SetExternalWrench(ext_w);
     
     ipopt.Solve(nlp_legs);

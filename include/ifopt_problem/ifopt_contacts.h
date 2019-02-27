@@ -87,11 +87,13 @@ public:
     
     ExCost() : ExCost("cost_term") 
     {
+        
         _W_p = 0;
-	_W_com = 0;
-	_W_force = 1;
+        _W_com = 0;
+        _W_force = 1;
         _p_ref.setZero(12);
-	_com_ref.setZero();
+        _com_ref.setZero();
+    
     }
     ExCost(const std::string& name) : CostTerm(name) {}
 
