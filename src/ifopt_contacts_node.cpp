@@ -57,22 +57,27 @@ int main(int argc, char **argv)
     ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
     Eigen::Vector3d pelvis = pose.translation();
     
+    double wheel_offset_x = 0.35;
     double wheel_offset_y = 0.35;
 
     ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
     Eigen::Vector3d wheel_1 = pose.translation();
+    wheel_1.x() =  pelvis.x() + wheel_offset_x;
     wheel_1.y() =  pelvis.y() + wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
     Eigen::Vector3d wheel_2 = pose.translation();
+    wheel_2.x() =  pelvis.x() + wheel_offset_x;
     wheel_2.y() =  pelvis.y() - wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
     Eigen::Vector3d wheel_3 = pose.translation();
+    wheel_3.x() =  pelvis.x() - wheel_offset_x;
     wheel_3.y() =  pelvis.y() + wheel_offset_y;
 
     ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
     Eigen::Vector3d wheel_4 = pose.translation();
+    wheel_4.x() =  pelvis.x() - wheel_offset_x;
     wheel_4.y() =  pelvis.y() - wheel_offset_y;
     
     Eigen::Affine3d pose_arm1_8, pose_arm2_8;
@@ -92,8 +97,7 @@ int main(int argc, char **argv)
          20.0, 
          pelvis.z() - ground_z;
     
-//     P << 20, 20, 20; 
-    P << 20, 20, 18;
+    P << 20, 20, 20; // 20, 20, 18; 
 
     if (log) {
         logger->add("C", C);
@@ -473,7 +477,7 @@ int main(int argc, char **argv)
     ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
     ci.waitReachCompleted("arm2_8");
 
-/* Move CoM to initial CoM for pushing */    
+/* CoM opt for pushing */    
     static_constr->SetExternalWrench(ext_w);
     
     ipopt.Solve(nlp_legs);
