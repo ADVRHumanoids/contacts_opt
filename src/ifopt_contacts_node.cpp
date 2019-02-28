@@ -499,12 +499,23 @@ int main(int argc, char **argv)
         logger->add("F_final", F_opt_legs[4]);
         logger->add("n_final", n_opt_legs[4]);
     }
-    
+
+/* Pushing */      
     ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
     ci.setBaseLink("arm1_8", "pelvis");
    
     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
     ci.setBaseLink("arm2_8", "pelvis");
+    
+    
+    Eigen::Vector6d F_adm;
+    F_adm.setZero();
+    
+    for (int i : {0, 1, 2, 3}) 
+    {
+        F_adm.head(3) = F_opt_legs[4].segment<3>(3*i);  
+//         ci.setForceReference(feet[i], F_adm);
+    }
 
 
     while (ros::ok()) {

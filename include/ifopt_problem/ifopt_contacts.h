@@ -200,8 +200,8 @@ public:
     {
         Eigen::Vector6d value;
         value.setZero();
-	
-	Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
+        
+        Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
         
         for(int i : {1, 2, 3, 4})
         {
@@ -245,9 +245,9 @@ public:
     void FillJacobianBlock (std::string var_set, Jacobian& jac_block) const override
     {
         jac_block.setZero();
-	
-	Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
-	
+        
+        Eigen::Vector3d com = GetVariables()->GetComponent("com")->GetValues();
+        
         for(int i = 0; i < 4; i++)
         {
             if(var_set == ("F" + std::to_string(i+1)))
@@ -392,7 +392,7 @@ public:
         fname_(force_name)
     {
         mu_= 1; 
-	_F_thr = 0;
+        _F_thr = 0;
 
     }
     
