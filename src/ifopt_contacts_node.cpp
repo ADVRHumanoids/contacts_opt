@@ -3,7 +3,9 @@
 #include <cartesian_interface/ros/RosServerClass.h>
 #include <cartesian_interface/problem/Com.h>
 
+#include <XBotInterface/RobotInterface.h>
 #include <RobotInterfaceROS/ConfigFromParam.h>
+
 #include <cartesian_interface/ros/RosImpl.h>
 
 #include <ifopt/problem.h>
@@ -15,6 +17,68 @@ using namespace XBot;
 using namespace XBot::Cartesian;
 using namespace ifopt;
 
+void set_low_stiffness(XBot::RobotInterface::Ptr robot)
+{
+    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
+    for(int i = 0; i < 4; i++)
+    {
+        Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
+        leg_k << 300, 300, 300, 150, 50, 0;
+        robot->leg(i).setStiffness(leg_k);
+    }
+    robot->move();
+}
+
+
+class ForcePublisher
+{
+  
+public:
+    
+    ForcePublisher(std::vector<std::string> feet);
+    
+    void send_force(const Eigen::VectorXd& f_opt);
+    
+private:
+    
+    std::vector<std::string> _feet;
+    std::vector<ros::Publisher> _pubs;
+    
+};
+
+ForcePublisher::ForcePublisher(std::vector<std::string> feet)
+{
+    ros::NodeHandle nh;
+    
+    _feet = feet;
+    
+    for(auto l : _feet)
+    {
+        _pubs.push_back( nh.advertise<geometry_msgs::WrenchStamped>("cartesian/force_ffwd/" + l, 1) );
+    }
+}
+
+void ForcePublisher::send_force(const Eigen::VectorXd &f_opt)
+{
+     
+    for (int i : {0, 1, 2, 3}) 
+    {
+        Eigen::Vector3d f =  f_opt.segment<3>(3*i);
+            
+        geometry_msgs::WrenchStamped msg;
+        msg.header.frame_id = "world";
+        msg.header.stamp = ros::Time::now();        
+        msg.wrench.force.x = f.x();
+        msg.wrench.force.y = f.y();
+        msg.wrench.force.z = f.z();
+        
+       _pubs[i].publish(msg);
+        
+    }
+    
+}
+
+
 
 int main(int argc, char **argv)
 {
@@ -22,9 +86,13 @@ int main(int argc, char **argv)
     /* Init ROS node */
     ros::init(argc, argv, "ifopt_contacts_node");
     ros::NodeHandle nh;
+    
+    std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
+    std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
+    
+    ForcePublisher fpub(feet);
 
-    XBot::Cartesian::RosImpl ci;
-
+    XBot::Cartesian::RosImpl ci;   
 
     double rate;
     nh.param("rate", rate, 100.);
@@ -32,6 +100,12 @@ int main(int argc, char **argv)
     ros::Rate loop_rate(rate);
 
     ConfigOptions config = XBot::ConfigOptionsFromParamServer();
+    
+    auto robot = XBot::RobotInterface::getRobot(config);
+    robot->sense();
+    
+    auto model = ModelInterface::getModel(config);   
+    model->update();
 
     bool log;
     nh.param("log", log, false);
@@ -176,9 +250,6 @@ int main(int argc, char **argv)
 
     auto cost = std::make_shared<ExCost>();
 
-    std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
-    std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
-
     nlp.AddVariableSet(p1);
     nlp.AddVariableSet(p2);
     nlp.AddVariableSet(p3);
@@ -206,8 +277,9 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(n4);
 
     nlp.AddVariableSet(com);
-//     com->SetBounds(com_ref - 0.2*Eigen::Vector3d::Ones(), com_ref + 0.2*Eigen::Vector3d::Ones());
 
+    double m = model->getMass();
+    static_constr->SetMass(m);
     static_constr->SetExternalWrench(ext_w);
     nlp.AddConstraintSet(static_constr);
 
@@ -266,7 +338,7 @@ int main(int argc, char **argv)
         logger->add("n_initial", n_opt);
     }
 
-
+    
 /* Simultaneous foot lift  */
 
     Eigen::Affine3d w_T_com;
@@ -446,6 +518,10 @@ int main(int argc, char **argv)
 
         Eigen::Affine3d w_T_f2;
         w_T_f2.translation() = pi;
+        
+        fpub.send_force( F_opt_legs[i] );
+        
+        set_low_stiffness(robot);
 
         Trajectory::WayPointVector wp;
         wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
@@ -468,6 +544,7 @@ int main(int argc, char **argv)
 
     }
     
+    
     pose_arm1_8.translation().x() += 0.15;
     ci.setBaseLink("arm1_8", "world");
     ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
@@ -477,7 +554,7 @@ int main(int argc, char **argv)
     ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
     ci.waitReachCompleted("arm2_8");
 
-/* CoM opt for pushing */    
+/* CoM-Force opt for pushing */    
     static_constr->SetExternalWrench(ext_w);
     
     ipopt.Solve(nlp_legs);
@@ -506,17 +583,10 @@ int main(int argc, char **argv)
    
     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
     ci.setBaseLink("arm2_8", "pelvis");
+        
+   
+    fpub.send_force( F_opt_legs[4] );
     
-    
-    Eigen::Vector6d F_adm;
-    F_adm.setZero();
-    
-    for (int i : {0, 1, 2, 3}) 
-    {
-        F_adm.head(3) = F_opt_legs[4].segment<3>(3*i);  
-//         ci.setForceReference(feet[i], F_adm);
-    }
-
 
     while (ros::ok()) {
         ros::spinOnce();

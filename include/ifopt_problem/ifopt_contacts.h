@@ -224,6 +224,11 @@ public:
         _wrench_ext = w;
     }
     
+    void SetMass(const double& m)
+    {
+        _mg << 0.0, 0.0, -m*9.81;
+    }
+    
     // The only constraint in this set is an equality constraint to 1.
     // Constant values should always be put into GetBounds(), not GetValues().
     // For inequality constraints (<,>), use Bounds(x, inf) or Bounds(-inf, x).

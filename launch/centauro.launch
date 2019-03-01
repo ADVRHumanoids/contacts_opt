@@ -23,6 +23,21 @@
         <arg name="rate" value="$(arg rate)"/>
         <arg name="prefix" value="$(arg prefix)"/>
     </include>
+    
+    <node pkg="cartesian_interface"
+          type="torque_feedforward_node"
+          name="centauro_torque_ffwd" 
+          output="screen">
+          
+          <param name="force_ttl" value="3600"/>
+          
+          <param name="is_model_floating_base" value="true"/>
+          <param name="model_type" value="RBDL"/>
+          
+          <param name="links" type="yaml" 
+                 value="[wheel_1, wheel_2, wheel_3, wheel_4]"/>
+          
+    </node>
 
 
 </launch>
