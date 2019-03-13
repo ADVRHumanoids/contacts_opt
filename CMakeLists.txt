@@ -38,7 +38,7 @@ include_directories(include
                     ${EIGEN3_INCLUDE_DIRS}
                     ${catkin_INCLUDE_DIRS}
                     ${ReflexxesTypeII_INCLUDE_DIRS}
-	            ${cartesian_interface_INCLUDE_DIRS}
+                    ${cartesian_interface_INCLUDE_DIRS}
                     )
 
 set(ENABLE_XENO CACHE BOOL "ON")
@@ -47,8 +47,18 @@ if ( ${ENABLE_XENO} )
    find_package(RTnet)
 endif()
 
-# C++11
-# add_compile_options(-std=c++11)
+# C++ 11
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-std=c++11" COMPILER_SUPPORTS_CXX11)
+check_cxx_compiler_flag("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+elseif(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+else()
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
+
 
 # find packages
 
@@ -60,8 +70,8 @@ include_directories(include
 ###########
 ## Build ##
 ###########
-add_executable(ifopt_contacts src/ifopt_contacts.cpp)
 add_executable(ifopt_contacts_node src/ifopt_contacts_node.cpp)
+add_executable(forza_giusta_node src/ForzaGiustaFeedForward.cpp)
 
 set_target_properties(ifopt_contacts_node PROPERTIES COMPILE_FLAGS -std=c++14)
 
@@ -69,20 +79,29 @@ set_target_properties(ifopt_contacts_node PROPERTIES COMPILE_FLAGS -std=c++14)
 ##########
 ## Link ##
 ##########
-target_link_libraries(ifopt_contacts PUBLIC ifopt::ifopt_ipopt ${XCM_LIBRARIES}) 
 target_link_libraries(ifopt_contacts_node ${OpenSoT_LIBRARIES}
-					  ${XBotInterface_LIBRARIES}
-					  ${catkin_LIBRARIES}
-					  ${ReflexxesTypeII_LIBRARIES}
-					  ${cartesian_interface_LIBRARIES}					  
-					  ifopt::ifopt_ipopt)
+                                          ${XBotInterface_LIBRARIES}
+                                          ${catkin_LIBRARIES}
+                                          ${ReflexxesTypeII_LIBRARIES}
+                                          ${cartesian_interface_LIBRARIES}  
+                                          ifopt::ifopt_ipopt)
+target_link_libraries(forza_giusta_node ${OpenSoT_LIBRARIES}
+                                        ${XBotInterface_LIBRARIES}
+                                        ${catkin_LIBRARIES}
+                                        ${ReflexxesTypeII_LIBRARIES}
+                                        ${cartesian_interface_LIBRARIES})
 
 #############
 ## Install ##
 #############
-ycm_library_install(ifopt_contacts 1 0 0)
 
 install(TARGETS ifopt_contacts_node ifopt_contacts_node
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(TARGETS forza_giusta_node forza_giusta_node
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

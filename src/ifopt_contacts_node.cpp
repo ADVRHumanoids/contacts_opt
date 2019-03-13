@@ -12,7 +12,6 @@
 #include <ifopt/ipopt_solver.h>
 #include <ifopt_problem/ifopt_contacts.h>
 
-
 using namespace XBot;
 using namespace XBot::Cartesian;
 using namespace ifopt;
@@ -38,11 +37,16 @@ public:
     ForcePublisher(std::vector<std::string> feet);
     
     void send_force(const Eigen::VectorXd& f_opt);
+    void send_normal(const Eigen::VectorXd& n_opt);
+    void send_wrench_manip(const Eigen::VectorXd& tau_opt);
+    void send_mu(const double& mu);
     
 private:
     
-    std::vector<std::string> _feet;
-    std::vector<ros::Publisher> _pubs;
+    std::vector<ros::Publisher> _pubs_force;
+    std::vector<ros::Publisher> _pubs_normal;
+    ros::Publisher _pub_wrench_manip;
+    ros::Publisher _pub_mu;
     
 };
 
@@ -50,12 +54,17 @@ ForcePublisher::ForcePublisher(std::vector<std::string> feet)
 {
     ros::NodeHandle nh;
     
-    _feet = feet;
     
-    for(auto l : _feet)
+    for(auto l : feet)
     {
-        _pubs.push_back( nh.advertise<geometry_msgs::WrenchStamped>("cartesian/force_ffwd/" + l, 1) );
+//         _pubs.push_back( nh.advertise<geometry_msgs::WrenchStamped>("cartesian/force_ffwd/" + l, 1) );
+        _pubs_force.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/force_ref/" + l, 1) );
+        _pubs_normal.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/normal/" + l, 1) );
     }
+    
+    _pub_wrench_manip = nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/wrench_manip/", 1);
+    _pub_mu = nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/mu/", 1);
+    
 }
 
 void ForcePublisher::send_force(const Eigen::VectorXd &f_opt)
@@ -71,13 +80,63 @@ void ForcePublisher::send_force(const Eigen::VectorXd &f_opt)
         msg.wrench.force.x = f.x();
         msg.wrench.force.y = f.y();
         msg.wrench.force.z = f.z();
-        
-       _pubs[i].publish(msg);
+       
+       _pubs_force[i].publish(msg);
         
     }
     
 }
 
+void ForcePublisher::send_normal(const Eigen::VectorXd &n_opt)
+{
+     
+    for (int i : {0, 1, 2, 3}) 
+    {
+        Eigen::Vector3d n =  n_opt.segment<3>(3*i);
+            
+        geometry_msgs::WrenchStamped msg;
+        msg.header.frame_id = "world";
+        msg.header.stamp = ros::Time::now();        
+        msg.wrench.force.x = n.x();
+        msg.wrench.force.y = n.y();
+        msg.wrench.force.z = n.z();
+       
+       _pubs_normal[i].publish(msg);
+        
+    }
+    
+}
+
+void ForcePublisher::send_wrench_manip(const Eigen::VectorXd& tau_opt)
+{
+              
+        geometry_msgs::WrenchStamped msg;
+        msg.header.frame_id = "world";
+        msg.header.stamp = ros::Time::now();        
+        msg.wrench.force.x = tau_opt.x();
+        msg.wrench.force.y = tau_opt.y();
+        msg.wrench.force.z = tau_opt.z();
+        msg.wrench.torque.x = tau_opt[3];
+        msg.wrench.torque.y = tau_opt[4];
+        msg.wrench.torque.z = tau_opt[5];
+       
+       _pub_wrench_manip.publish(msg);
+        
+    
+}
+
+void ForcePublisher::send_mu(const double& mu)
+{
+              
+        geometry_msgs::WrenchStamped msg;
+        msg.header.frame_id = "world";
+        msg.header.stamp = ros::Time::now();        
+        msg.wrench.force.x = mu;
+      
+       _pub_mu.publish(msg);
+        
+    
+}
 
 
 int main(int argc, char **argv)
@@ -96,7 +155,10 @@ int main(int argc, char **argv)
 
     double rate;
     nh.param("rate", rate, 100.);
-
+    double mu = nh.param("mu", 0.5);
+    
+    fpub.send_mu(mu);
+    
     ros::Rate loop_rate(rate);
 
     ConfigOptions config = XBot::ConfigOptionsFromParamServer();
@@ -105,7 +167,6 @@ int main(int argc, char **argv)
     robot->sense();
     
     auto model = ModelInterface::getModel(config);   
-    model->update();
 
     bool log;
     nh.param("log", log, false);
@@ -158,7 +219,7 @@ int main(int argc, char **argv)
     ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose_arm1_8);       
     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose_arm2_8);
 
-    double ground_z = wheel_1.z();
+    double ground_z = wheel_1.z();  
 
 /* Environment super-ellipsoid parameters*/ 
     Eigen::Vector3d C, R, P;
@@ -171,7 +232,7 @@ int main(int argc, char **argv)
          20.0, 
          pelvis.z() - ground_z;
     
-    P << 20, 20, 20; // 20, 20, 18; 
+    P << 20, 20, 20; 
 
     if (log) {
         logger->add("C", C);
@@ -211,8 +272,6 @@ int main(int argc, char **argv)
     Eigen::Vector3d F_max;
     F_max.setOnes();
     F_max *= 500;
-
-    double mu = 0.5;
 
     auto p1 = std::make_shared<ExVariables> ("p1");
     auto p2 = std::make_shared<ExVariables> ("p2");
@@ -519,7 +578,8 @@ int main(int argc, char **argv)
         Eigen::Affine3d w_T_f2;
         w_T_f2.translation() = pi;
         
-        fpub.send_force( F_opt_legs[i] );
+        fpub.send_force( F_opt_legs[i] ); 
+        fpub.send_normal( n_opt_legs[i] ); 
         
         set_low_stiffness(robot);
 
@@ -586,6 +646,8 @@ int main(int argc, char **argv)
         
    
     fpub.send_force( F_opt_legs[4] );
+    fpub.send_normal( n_opt_legs[4] );
+    fpub.send_wrench_manip(ext_w);
     
 
     while (ros::ok()) {
