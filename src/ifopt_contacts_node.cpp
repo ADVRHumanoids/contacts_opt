@@ -39,14 +39,12 @@ public:
     void send_force(const Eigen::VectorXd& f_opt);
     void send_normal(const Eigen::VectorXd& n_opt);
     void send_wrench_manip(const Eigen::VectorXd& tau_opt);
-    void send_mu(const double& mu);
     
 private:
     
     std::vector<ros::Publisher> _pubs_force;
     std::vector<ros::Publisher> _pubs_normal;
     ros::Publisher _pub_wrench_manip;
-    ros::Publisher _pub_mu;
     
 };
 
@@ -57,13 +55,11 @@ ForcePublisher::ForcePublisher(std::vector<std::string> feet)
     
     for(auto l : feet)
     {
-//         _pubs.push_back( nh.advertise<geometry_msgs::WrenchStamped>("cartesian/force_ffwd/" + l, 1) );
         _pubs_force.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/force_ref/" + l, 1) );
         _pubs_normal.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/normal/" + l, 1) );
     }
     
     _pub_wrench_manip = nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/wrench_manip/", 1);
-    _pub_mu = nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/mu/", 1);
     
 }
 
@@ -125,26 +121,14 @@ void ForcePublisher::send_wrench_manip(const Eigen::VectorXd& tau_opt)
     
 }
 
-void ForcePublisher::send_mu(const double& mu)
-{
-              
-        geometry_msgs::WrenchStamped msg;
-        msg.header.frame_id = "world";
-        msg.header.stamp = ros::Time::now();        
-        msg.wrench.force.x = mu;
-      
-       _pub_mu.publish(msg);
-        
-    
-}
-
 
 int main(int argc, char **argv)
 {
 
     /* Init ROS node */
     ros::init(argc, argv, "ifopt_contacts_node");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("ifopt_contacts");;
+    ros::NodeHandle nh_priv("~");
     
     std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
     std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
@@ -153,12 +137,9 @@ int main(int argc, char **argv)
 
     XBot::Cartesian::RosImpl ci;   
 
-    double rate;
-    nh.param("rate", rate, 100.);
-    double mu = nh.param("mu", 0.5);
-    
-    fpub.send_mu(mu);
-    
+    double rate = nh_priv.param("rate", 100.0);
+    double mu = nh_priv.param("mu", 0.5);
+        
     ros::Rate loop_rate(rate);
 
     ConfigOptions config = XBot::ConfigOptionsFromParamServer();
@@ -166,16 +147,17 @@ int main(int argc, char **argv)
     auto robot = XBot::RobotInterface::getRobot(config);
     robot->sense();
     
-    auto model = ModelInterface::getModel(config);   
+    auto model = ModelInterface::getModel(config);  
+    model->update();
 
     bool log;
-    nh.param("log", log, false);
+    nh_priv.param("log", log, false);
+    
 
     XBot::MatLogger::Ptr logger;
     uint T = ros::Time::now().sec;
     std::stringstream ss;
-
-    ss << "/tmp/ifopt_contacts_node_" << T;
+    ss << "/tmp/ifopt_node" << T;
 
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
@@ -234,11 +216,13 @@ int main(int argc, char **argv)
     
     P << 20, 20, 20; 
 
-    if (log) {
+    if (log) 
+    {
         logger->add("C", C);
         logger->add("R", R);
         logger->add("P", P);
     }
+    
 
 /* Initial desired wheel position on the ground*/
     Eigen::VectorXd p_ref;
@@ -386,7 +370,8 @@ int main(int argc, char **argv)
     n_opt = x_opt.segment<12> (24);
     com_opt =  x_opt.tail(3);
 
-    if (log) {
+    if (log) 
+    {
         logger->add("com_ref", com_ref);
         logger->add("p_ref", p_ref);
         logger->add("F_ref", ext_w.head(3));
@@ -429,13 +414,13 @@ int main(int argc, char **argv)
         Eigen::Affine3d w_T_f;
         w_T_f.translation() = pi;
 
-// 	ci.setTargetPose(feet[i], w_T_f, 5.0);
+//         ci.setTargetPose(feet[i], w_T_f, 5.0);
 
         Eigen::Affine3d a_T_f;
         a_T_f.translation() = ni;
         a_T_f.linear() =  R.transpose();
 
-// 	ci.setTargetPose(ankle[i], a_T_f, 5.0);
+//         ci.setTargetPose(ankle[i], a_T_f, 5.0);
 
     }
 
@@ -564,6 +549,9 @@ int main(int argc, char **argv)
         R.coeffRef(2, 0) = ni.x();
         R.coeffRef(2, 1) = ni.y();
         R.coeffRef(2, 2) = ni.z();
+        
+        fpub.send_force( F_opt_legs[i] ); 
+        fpub.send_normal( n_opt_legs[i] ); 
 
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
@@ -578,10 +566,7 @@ int main(int argc, char **argv)
         Eigen::Affine3d w_T_f2;
         w_T_f2.translation() = pi;
         
-        fpub.send_force( F_opt_legs[i] ); 
-        fpub.send_normal( n_opt_legs[i] ); 
-        
-        set_low_stiffness(robot);
+//         set_low_stiffness(robot);
 
         Trajectory::WayPointVector wp;
         wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
@@ -594,17 +579,19 @@ int main(int argc, char **argv)
         ci.waitReachCompleted(feet[i]);
         ci.waitReachCompleted(ankle[i]);
 
-        if (log) {
+        if (log) 
+        {
             logger->add("x_sol_lift", x_opt_legs[i]);
             logger->add("com_lift", com_opt_legs[i]);
             logger->add("p_lift", p_opt_legs[i]);
             logger->add("F_lift", F_opt_legs[i]);
             logger->add("n_lift", n_opt_legs[i]);
+            logger->add("R_lift", R);
         }
+        
 
     }
-    
-    
+       
     pose_arm1_8.translation().x() += 0.15;
     ci.setBaseLink("arm1_8", "world");
     ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
@@ -629,7 +616,8 @@ int main(int argc, char **argv)
     ci.setTargetPose("com", w_T_com, 5.0);
     ci.waitReachCompleted("com");
     
-    if (log) {
+    if (log) 
+    {
         logger->add("x_sol_final", x_opt_legs[4]);
         logger->add("com_final", com_opt_legs[4]);
         logger->add("p_final", p_opt_legs[4]);
@@ -650,13 +638,14 @@ int main(int argc, char **argv)
     fpub.send_wrench_manip(ext_w);
     
 
-    while (ros::ok()) {
+    while (ros::ok()) 
+    {
         ros::spinOnce();
         loop_rate.sleep();
     }
 
-    if (log)
-        logger->flush();
+//     if (log)
+//         logger->flush();
 
     return 0;
 }

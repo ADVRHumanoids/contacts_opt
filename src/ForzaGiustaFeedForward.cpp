@@ -11,7 +11,6 @@
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 std::map<std::string, Eigen::Matrix3d> * g_Rmap_ptr;
 Eigen::Vector6d* wrench_manip_ptr;
-double mu;
 
 
 void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
@@ -19,10 +18,6 @@ void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string 
     tf::wrenchMsgToEigen(msg->wrench, g_fmap_ptr->at(l));
 }
 
-void on_mu_recv(const geometry_msgs::WrenchStampedConstPtr& msg)
-{
-    mu = msg->wrench.force.x;
-}
 
 void on_wrench_recv(const geometry_msgs::WrenchStampedConstPtr& msg)
 {
@@ -32,21 +27,29 @@ void on_wrench_recv(const geometry_msgs::WrenchStampedConstPtr& msg)
 void on_normal_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
 {
    
-    Eigen::Matrix3d R; 
-    R.setZero();
+    Eigen::Matrix3d R;    
     
-    auto _tmp = pow( (msg->wrench.force.x*msg->wrench.force.x) + (msg->wrench.force.y*msg->wrench.force.y) , 0.5 );
+    if (msg->wrench.force.x == 0 && msg->wrench.force.y == 0 && msg->wrench.force.z == 1) 
+    {      
+        R.setIdentity();             
+    }     
+    
+    else
+    {
 
-    R.coeffRef(0, 0) =  msg->wrench.force.y/_tmp;
-    R.coeffRef(0, 1) = -msg->wrench.force.x/_tmp;
+        double _tmp = std::sqrt( (msg->wrench.force.x*msg->wrench.force.x) + (msg->wrench.force.y*msg->wrench.force.y) );
 
-    R.coeffRef(1, 0) = (msg->wrench.force.x * msg->wrench.force.z)/_tmp;
-    R.coeffRef(1, 1) = (msg->wrench.force.y * msg->wrench.force.z)/_tmp;
-    R.coeffRef(1, 2) = -_tmp;
+        R.coeffRef(0, 0) =  msg->wrench.force.y/_tmp;
+        R.coeffRef(0, 1) = -msg->wrench.force.x/_tmp;
 
-    R.coeffRef(2, 0) = msg->wrench.force.x;
-    R.coeffRef(2, 1) = msg->wrench.force.y;
-    R.coeffRef(2, 2) = msg->wrench.force.z;
+        R.coeffRef(1, 0) = (msg->wrench.force.x * msg->wrench.force.z)/_tmp;
+        R.coeffRef(1, 1) = (msg->wrench.force.y * msg->wrench.force.z)/_tmp;
+        R.coeffRef(1, 2) = -_tmp;
+
+        R.coeffRef(2, 0) = msg->wrench.force.x;
+        R.coeffRef(2, 1) = msg->wrench.force.y;
+        R.coeffRef(2, 2) = msg->wrench.force.z;
+    }
     
     g_Rmap_ptr->at(l) = R; 
         
@@ -70,6 +73,7 @@ int main(int argc, char ** argv)
     
     
     double rate = nh_priv.param("rate", 100.0);
+    double mu = nh_priv.param("mu", 0.3);
     auto links = nh_priv.param("links", std::vector<std::string>());
     
     /* BLACKLISTED JOINTS */    
@@ -147,25 +151,28 @@ int main(int argc, char ** argv)
     
     ROS_INFO("Subscribed to topic '%s'", sub_wrench_manip.getTopic().c_str());
     
-    auto sub_mu = nh.subscribe<geometry_msgs::WrenchStamped>("mu/",
-                                                              1, 
-                                                              boost::bind(on_mu_recv, _1));
-    
-    double _mu = 0.5; 
-    
-    ROS_INFO("Subscribed to topic '%s'", sub_mu.getTopic().c_str());
-    
-    
+
     
     g_fmap_ptr = &f_ref_map;
     g_Rmap_ptr = &RotM_map;
     wrench_manip_ptr = &wrench_manip;
-    _mu = mu;
     
-    auto force_opt = boost::make_shared<forza_giusta::ForceOptimization>(model, links, _mu);
+    auto force_opt = boost::make_shared<forza_giusta::ForceOptimization>(model, links, mu);
+    
     
     Eigen::VectorXd tau;
     ros::Rate loop_rate(rate);
+    
+    bool log;
+    nh_priv.param("log", log, false);
+    
+    XBot::MatLogger::Ptr logger;
+    uint T = ros::Time::now().sec;
+    std::stringstream ss;
+    ss << "/tmp/forza_giusta_node_" << T;
+
+    if (log)
+        logger = XBot::MatLogger::getLogger(ss.str());
     
     while(ros::ok())
     {
@@ -181,19 +188,42 @@ int main(int argc, char ** argv)
         model->computeGravityCompensation(tau);
         tau -= tau_offset;
         tau.head(6) += wrench_manip;
-        
+       
         force_opt->compute(tau, f_ref_map, RotM_map, f_ForzaGiusta_map);
         
+        force_opt->log(logger);
+               
+        for(const auto& pair : f_ref_map)
+        {        
+            Eigen::Vector6d f_world = pair.second; 
+            
+            std::cout << "F_ref" + pair.first + ": " << f_world << std::endl;   
+            
+            if (log) 
+            {          
+                logger->add("F_ref_" + pair.first, f_world);
+                                      
+            }            
+        }
+        
+
+
         for(const auto& pair : f_ForzaGiusta_map)
         {
-            Eigen::MatrixXd J;
-            
-            model->getJacobian(pair.first, J);
-            
+      
             Eigen::Vector6d f_world = pair.second;
          
-//             std::cout<<"f_ForzaGiusta: "<<f_world.transpose()<<std::endl;
-               
+            std::cout << "F_" + pair.first + ": " << f_world << std::endl;
+
+            if (log) 
+            {          
+                logger->add("F_" + pair.first, f_world);
+                                      
+            }
+            
+            Eigen::MatrixXd J;           
+            model->getJacobian(pair.first, J);
+            
             tau += J.transpose() * f_world;
             
         }
@@ -205,6 +235,9 @@ int main(int argc, char ** argv)
         
         loop_rate.sleep();
     }
+    
+   if (log)  
+       logger->flush();
     
     return 0;
     

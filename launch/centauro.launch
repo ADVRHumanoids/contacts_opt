@@ -17,19 +17,23 @@
         
     <param name="cartesian/velocity_whitelist" type="yaml" 
         value="[j_wheel_1, j_wheel_2, j_wheel_3, j_wheel_4]"/>
-    
-
+        
     <include file="$(find cartesian_interface)/launch/cartesio.launch">
         <arg name="rate" value="$(arg rate)"/>
         <arg name="prefix" value="$(arg prefix)"/>
-    </include>
-             
-    </node>
+    </include>    
     
-        <node pkg="contacts_opt"
+                
+    <node pkg="contacts_opt"
           type="forza_giusta_node"
           name="forza_giusta_node_torque_ffwd" 
           output="screen">
+          
+          <arg name="rate" value="$(arg rate)"/>
+          
+          <param name="mu" value="0.5"/>
+          
+          <param name="log" type="bool" value="true"/>
                    
           <param name="is_model_floating_base" value="true"/>
           <param name="model_type" value="RBDL"/>
@@ -38,6 +42,7 @@
                  value="[wheel_1, wheel_2, wheel_3, wheel_4]"/>
           
     </node>
+    
 
 
 </launch>
