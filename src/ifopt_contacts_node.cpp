@@ -12,6 +12,8 @@
 #include <ifopt/ipopt_solver.h>
 #include <ifopt_problem/ifopt_contacts.h>
 
+#include <signal.h>
+
 using namespace XBot;
 using namespace XBot::Cartesian;
 using namespace ifopt;
@@ -122,8 +124,22 @@ void ForcePublisher::send_wrench_manip(const Eigen::VectorXd& tau_opt)
 }
 
 
+XBot::MatLogger::Ptr logger;
+
+void sighandler(int sig)
+{
+    
+    if (log)
+      logger->flush();
+}
+
+
 int main(int argc, char **argv)
 {
+    
+    signal(SIGABRT, &sighandler);
+    signal(SIGTERM, &sighandler);
+    signal(SIGINT, &sighandler);
 
     /* Init ROS node */
     ros::init(argc, argv, "ifopt_contacts_node");
@@ -154,10 +170,10 @@ int main(int argc, char **argv)
     nh_priv.param("log", log, false);
     
 
-    XBot::MatLogger::Ptr logger;
+//     XBot::MatLogger::Ptr logger;
     uint T = ros::Time::now().sec;
     std::stringstream ss;
-    ss << "/tmp/ifopt_node" << T;
+    ss << "/tmp/ifopt_node_" << T;
 
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
@@ -387,7 +403,6 @@ int main(int argc, char **argv)
 
     Eigen::Affine3d w_T_com;
     w_T_com.translation() = com_opt;
-//     ci.setTargetPose("com", w_T_com, 5.0);
 
     for (int i : {0, 1, 2, 3}) 
     {
@@ -414,13 +429,10 @@ int main(int argc, char **argv)
         Eigen::Affine3d w_T_f;
         w_T_f.translation() = pi;
 
-//         ci.setTargetPose(feet[i], w_T_f, 5.0);
-
         Eigen::Affine3d a_T_f;
         a_T_f.translation() = ni;
         a_T_f.linear() =  R.transpose();
 
-//         ci.setTargetPose(ankle[i], a_T_f, 5.0);
 
     }
 
@@ -550,8 +562,9 @@ int main(int argc, char **argv)
         R.coeffRef(2, 1) = ni.y();
         R.coeffRef(2, 2) = ni.z();
         
-        fpub.send_force( F_opt_legs[i] ); 
-        fpub.send_normal( n_opt_legs[i] ); 
+        fpub.send_force(F_opt_legs[i]); 
+        fpub.send_normal(n_opt_legs[i]);
+//         set_low_stiffness(robot);
 
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
@@ -565,8 +578,6 @@ int main(int argc, char **argv)
 
         Eigen::Affine3d w_T_f2;
         w_T_f2.translation() = pi;
-        
-//         set_low_stiffness(robot);
 
         Trajectory::WayPointVector wp;
         wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
@@ -644,8 +655,6 @@ int main(int argc, char **argv)
         loop_rate.sleep();
     }
 
-//     if (log)
-//         logger->flush();
 
     return 0;
 }

@@ -197,7 +197,7 @@ int main(int argc, char ** argv)
         {        
             Eigen::Vector6d f_world = pair.second; 
             
-            std::cout << "F_ref" + pair.first + ": " << f_world << std::endl;   
+            std::cout << "F_ref" + pair.first + ": " << f_world.head(3) << std::endl;   
             
             if (log) 
             {          
@@ -213,7 +213,7 @@ int main(int argc, char ** argv)
       
             Eigen::Vector6d f_world = pair.second;
          
-            std::cout << "F_" + pair.first + ": " << f_world << std::endl;
+            std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
 
             if (log) 
             {          

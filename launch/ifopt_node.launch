@@ -1,6 +1,6 @@
 <launch>
 
-    <arg name="rate" default="100.0"/>
+    <arg name="rate" default="10.0"/>
 
     <node pkg="contacts_opt" type="ifopt_contacts_node" name="ifopt_contacts_node" output="screen">
         <param name="mu" value="0.5"/>

@@ -119,7 +119,7 @@ void ForzaGiusta::_log(XBot::MatLogger::Ptr logger)
         XBot::ModelInterface::Ptr _model;
         std::vector<std::string> _contact_links;
         std::vector< OpenSoT::AffineHelper > _wrenches;
-        std::list<OpenSoT::tasks::MinimizeVariable::Ptr> min_wrench;
+        std::vector<OpenSoT::tasks::MinimizeVariable::Ptr> _min_wrench;
         
         OpenSoT::constraints::force::FrictionCone::Ptr _friction_cone;
         ForzaGiusta::Ptr _forza_giusta;
@@ -170,16 +170,19 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
                                OpenSoT::AffineHelper::Zero(opt.getSize(), optimize_contact_torque ? 0 : 3)
                               );    
         
-         min_wrench.back() = boost::make_shared<OpenSoT::tasks::MinimizeVariable>("MIN_" + cl + "_WRENCH", 
+         auto min_wrench = boost::make_shared<OpenSoT::tasks::MinimizeVariable>("MIN_" + cl + "_WRENCH", 
             _wrenches.back()
         );
-            
-        min_wrench_tasks.push_back(min_wrench.back());
-        
+                            
+       _min_wrench.push_back(min_wrench);   
+       
+        min_wrench_tasks.push_back(_min_wrench.back());
        
     }
     
+    
     /* Define friction cones */    
+    
     OpenSoT::constraints::force::FrictionCone::friction_cones friction_cones;
     
     Eigen::Matrix3d R; R.setIdentity();
@@ -188,6 +191,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
     {
         friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (R,mu));
     }
+    
     
     _friction_cone = boost::make_shared<OpenSoT::constraints::force::FrictionCone>(_wrenches, *_model, friction_cones);
     
@@ -222,24 +226,29 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
     std::vector<Eigen::Vector6d> Fc;
     Fc.resize(_contact_links.size());
  
-    _forza_giusta->setFixedBaseTorque(fixed_base_torque);
-    
-    OpenSoT::constraints::force::FrictionCone::friction_cones friction_cones;
-    
-    for(const auto& pair : Fref_ifopt_map)
-    {
-      min_wrench.back()->setReference(pair.second);
-      min_wrench_tasks.back()=min_wrench.back();
+    _forza_giusta->setFixedBaseTorque(fixed_base_torque);    
+
+    for(int i = 0; i < _contact_links.size(); i++)
+    {      
+        for(const auto& pair : Fref_ifopt_map)
+        {
+            if (_contact_links[i] == pair.first) 
+            {
+                _min_wrench[i]->setReference(pair.second);
+            } 
+        }
     }
     
-    
-    
-    for(const auto& pair : RotM_ifopt)
-    {
-      friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (pair.second,_mu));          
+    for(int i = 0; i < _contact_links.size(); i++)
+    {      
+        for(const auto& pair : RotM_ifopt)
+        {
+            if (_contact_links[i] == pair.first) 
+            {
+             _friction_cone->setContactRotationMatrix(pair.second,i);
+            } 
+        }
     }
-      
-//     _friction_cone = boost::make_shared<OpenSoT::constraints::force::FrictionCone>(_wrenches, *_model, friction_cones);
     
     _autostack->update(Eigen::VectorXd());
     
@@ -254,8 +263,6 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
         _wrenches[i].getValue(_x_value, Fc_map[_contact_links[i]]);
         
     }
-    
-
     
     return true;
     
