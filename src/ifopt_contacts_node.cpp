@@ -127,8 +127,7 @@ void ForcePublisher::send_wrench_manip(const Eigen::VectorXd& tau_opt)
 XBot::MatLogger::Ptr logger;
 
 void sighandler(int sig)
-{
-    
+{   
     if (log)
       logger->flush();
 }
@@ -169,11 +168,8 @@ int main(int argc, char **argv)
     bool log;
     nh_priv.param("log", log, false);
     
-
-//     XBot::MatLogger::Ptr logger;
-    uint T = ros::Time::now().sec;
     std::stringstream ss;
-    ss << "/tmp/ifopt_node_" << T;
+    ss << "/tmp/ifopt_node";
 
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
@@ -654,8 +650,7 @@ int main(int argc, char **argv)
         ros::spinOnce();
         loop_rate.sleep();
     }
-
-
+    
     return 0;
 }
 

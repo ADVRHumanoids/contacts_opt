@@ -167,9 +167,8 @@ int main(int argc, char ** argv)
     nh_priv.param("log", log, false);
     
     XBot::MatLogger::Ptr logger;
-    uint T = ros::Time::now().sec;
     std::stringstream ss;
-    ss << "/tmp/forza_giusta_node_" << T;
+    ss << "/tmp/forza_giusta_node";
 
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
@@ -197,11 +196,11 @@ int main(int argc, char ** argv)
         {        
             Eigen::Vector6d f_world = pair.second; 
             
-            std::cout << "F_ref" + pair.first + ": " << f_world.head(3) << std::endl;   
+            std::cout << "F_ifopt" + pair.first + ": " << f_world.head(3) << std::endl;   
             
             if (log) 
             {          
-                logger->add("F_ref_" + pair.first, f_world);
+                logger->add("F_ifopt_" + pair.first, f_world);
                                       
             }            
         }
