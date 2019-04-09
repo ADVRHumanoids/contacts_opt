@@ -7,6 +7,7 @@
 #include <OpenSoT/constraints/GenericConstraint.h>
 #include <OpenSoT/constraints/TaskToConstraint.h>
 #include <OpenSoT/tasks/MinimizeVariable.h>
+#include <OpenSoT/tasks/force/Force.h>
 
 namespace forza_giusta {
     
@@ -121,6 +122,8 @@ void ForzaGiusta::_log(XBot::MatLogger::Ptr logger)
         std::vector< OpenSoT::AffineHelper > _wrenches;
         std::vector<OpenSoT::tasks::MinimizeVariable::Ptr> _min_wrench;
         
+        OpenSoT::tasks::force::Wrenches::Ptr _Wrenches;
+              
         OpenSoT::constraints::force::FrictionCone::Ptr _friction_cone;
         ForzaGiusta::Ptr _forza_giusta;
         OpenSoT::solvers::iHQP::Ptr _solver;
@@ -169,20 +172,12 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
         _wrenches.emplace_back(opt.getVariable(cl) /
                                OpenSoT::AffineHelper::Zero(opt.getSize(), optimize_contact_torque ? 0 : 3)
                               );    
-        
-         auto min_wrench = boost::make_shared<OpenSoT::tasks::MinimizeVariable>("MIN_" + cl + "_WRENCH", 
-            _wrenches.back()
-        );
-                            
-       _min_wrench.push_back(min_wrench);   
-       
-        min_wrench_tasks.push_back(_min_wrench.back());
        
     }
     
+     _Wrenches = boost::make_shared<OpenSoT::tasks::force::Wrenches>(_contact_links,_wrenches);
     
-    /* Define friction cones */    
-    
+    /* Define friction cones */       
     OpenSoT::constraints::force::FrictionCone::friction_cones friction_cones;
     
     Eigen::Matrix3d R; R.setIdentity();
@@ -194,18 +189,16 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
     
     
     _friction_cone = boost::make_shared<OpenSoT::constraints::force::FrictionCone>(_wrenches, *_model, friction_cones);
-    
-    
+          
     /* Construct forza giusta task */
     _forza_giusta = boost::make_shared<ForzaGiusta>(_model, _wrenches, _contact_links);
     
-    /* Min wrench aggregated */
-     min_force_aggr = boost::make_shared<OpenSoT::tasks::Aggregated>(min_wrench_tasks, opt.getSize());
-    
     /* Define optimization problem */
-    _autostack = boost::make_shared<OpenSoT::AutoStack>(min_force_aggr);
+    _autostack = boost::make_shared<OpenSoT::AutoStack>(_Wrenches);
     _autostack << boost::make_shared<OpenSoT::constraints::TaskToConstraint>(_forza_giusta);
     _autostack << _friction_cone;
+    
+    _autostack->update(Eigen::VectorXd());
     
     _solver = boost::make_shared<OpenSoT::solvers::iHQP>(_autostack->getStack(), _autostack->getBounds(), 1.0);
     
@@ -234,7 +227,8 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
         {
             if (_contact_links[i] == pair.first) 
             {
-                _min_wrench[i]->setReference(pair.second);
+               auto _wrench = _Wrenches->getWrenchTask(_contact_links[i]);
+               _wrench->setReference(pair.second);
             } 
         }
     }
