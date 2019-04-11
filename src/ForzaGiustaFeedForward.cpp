@@ -88,7 +88,7 @@ int main(int argc, char ** argv)
     
     
     double rate = nh_priv.param("rate", 100.0);
-    double mu = nh_priv.param("mu", 0.3);
+    double mu = nh_priv.param("mu", 0.5);
     auto links = nh_priv.param("links", std::vector<std::string>());
     
     /* BLACKLISTED JOINTS */    
