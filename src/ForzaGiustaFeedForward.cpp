@@ -7,11 +7,19 @@
 
 #include <ifopt_problem/ForzaGiustaOpt.h>
 
+#include <sensor_msgs/JointState.h>
 
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 std::map<std::string, Eigen::Matrix3d> * g_Rmap_ptr;
 Eigen::Vector6d* wrench_manip_ptr;
 
+void on_joint_pos_recv(const sensor_msgs::JointStateConstPtr& msg, XBot::JointNameMap * jmap)
+{
+    for(int i = 0; i < msg->name.size(); i++)
+    {
+        (*jmap)[msg->name.at(i)] = msg->position.at(i);
+    }
+}
 
 void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
 {
@@ -68,6 +76,13 @@ int main(int argc, char ** argv)
     auto robot = XBot::RobotInterface::getRobot(XBot::ConfigOptionsFromParamServer());
     auto model = XBot::ModelInterface::getModel(XBot::ConfigOptionsFromParamServer());
     auto imu = robot->getImu().begin()->second;
+    
+    XBot::JointNameMap jmap;
+    robot->getMotorPosition(jmap);
+    
+    auto j_sub = ros::NodeHandle("cartesian").subscribe<sensor_msgs::JointState>("solution", 1, 
+                            std::bind(on_joint_pos_recv, std::placeholders::_1, &jmap)
+                        );
     
     robot->setControlMode(XBot::ControlMode::Effort());
     
@@ -178,9 +193,10 @@ int main(int argc, char ** argv)
         ros::spinOnce();
         
         /* Sense robot state and update model */
-        robot->sense(false);
-        model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
-        model->setFloatingBaseState(imu);
+//         robot->sense(false);
+//         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
+//         model->setFloatingBaseState(imu);
+        model->setJointPosition(jmap);
         model->update();
         
         /* Compute gcomp */
@@ -223,7 +239,7 @@ int main(int argc, char ** argv)
             Eigen::MatrixXd J;           
             model->getJacobian(pair.first, J);
             
-            tau += J.transpose() * f_world;
+            tau -= J.transpose() * f_world;
             
         }
         

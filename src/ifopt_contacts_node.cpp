@@ -24,7 +24,7 @@ void set_low_stiffness(XBot::RobotInterface::Ptr robot)
     for(int i = 0; i < 4; i++)
     {
         Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
-        leg_k << 300, 300, 300, 150, 50, 0;
+        leg_k << 500, 500, 500, 150, 50, 0;
         robot->leg(i).setStiffness(leg_k);
     }
     robot->move();
@@ -131,6 +131,28 @@ void sighandler(int sig)
     if (log)
       logger->flush();
 }
+
+float sign (Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3)
+{
+    return (p1.x() - p3.x()) * (p2.y() - p3.y()) - (p2.x() - p3.x()) * (p1.y() - p3.y());
+}
+
+bool PointInTriangle (Eigen::Vector3d pt, Eigen::Vector3d v1, Eigen::Vector3d v2, Eigen::Vector3d v3)
+{
+    float d1, d2, d3;
+    bool has_neg, has_pos;
+
+    d1 = sign(pt, v1, v2);
+    d2 = sign(pt, v2, v3);
+    d3 = sign(pt, v3, v1);
+
+    has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+    return !(has_neg && has_pos);
+}
+
+
 
 
 int main(int argc, char **argv)
@@ -464,7 +486,7 @@ int main(int argc, char **argv)
 
     nlp_legs.AddVariableSet(com);
 
-    double F_thr = 30;
+    double F_thr = 200; // magic number!
 
     fr_F1->set_F_thr(F_thr);
     fr_F2->set_F_thr(F_thr);
@@ -500,7 +522,7 @@ int main(int argc, char **argv)
 
     com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
 
-    for (int i : {0, 1, 2, 3}) 
+    for (int i : {0, 1, 2, 3})  
     {
 
         cost->SetPosRef(p_ref, 0);
@@ -515,7 +537,7 @@ int main(int argc, char **argv)
         
         // No position bound on the lifting leg
         p[i]->SetBounds(-Eigen::Vector3d::Ones(), Eigen::Vector3d::Ones());
-
+        
         ipopt.Solve(nlp_legs);
         x_opt_legs[i] = nlp_legs.GetOptVariables()->GetValues();
 
@@ -523,6 +545,22 @@ int main(int argc, char **argv)
         F_opt_legs[i] = x_opt_legs[i].segment<12> (12);
         n_opt_legs[i] = x_opt_legs[i].segment<12> (24);
         com_opt_legs[i] =  x_opt_legs[i].tail(3);
+        
+        
+        // Check CoM inside support polygon
+        bool com_check = true;
+        
+        if (i==0)
+            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(3),p_opt_legs[i].segment<3>(6),p_opt_legs[i].segment<3>(9));
+        if (i==1)
+            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(0),p_opt_legs[i].segment<3>(6),p_opt_legs[i].segment<3>(9));
+        if (i==2)
+            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(0),p_opt_legs[i].segment<3>(3),p_opt_legs[i].segment<3>(9));
+        if (i==3)
+            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(0),p_opt_legs[i].segment<3>(3),p_opt_legs[i].segment<3>(6));
+        
+        std::cout<<"CoM inside support polygon: "<< com_check <<std::endl;
+            
 
         F_max.setOnes();
         F_max *= 800;
@@ -560,11 +598,12 @@ int main(int argc, char **argv)
         
         fpub.send_force(F_opt_legs[i]); 
         fpub.send_normal(n_opt_legs[i]);
+        
 //         set_low_stiffness(robot);
 
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
-        ci.setTargetPose("com", w_T_com, 5.0);
+        ci.setTargetPose("com", w_T_com, 10.0);
         ci.waitReachCompleted("com");
 
         Eigen::Affine3d w_T_f1;
