@@ -206,8 +206,8 @@ int main(int argc, char ** argv)
         
         /* Compute gcomp */
         model->computeGravityCompensation(tau);
-//         tau -= tau_offset;
-//         tau.head(6) += wrench_manip;
+        tau -= tau_offset;
+        tau.head(6) += wrench_manip;
        
         force_opt->compute(tau, f_ref_map, RotM_map, f_ForzaGiusta_map);
         
@@ -217,7 +217,7 @@ int main(int argc, char ** argv)
         {        
             Eigen::Vector6d f_world = pair.second; 
             
-            std::cout << "F_ifopt" + pair.first + ": " << f_world.head(3) << std::endl;   
+//             std::cout << "F_ifopt" + pair.first + ": " << f_world.head(3) << std::endl;   
             
             if (log) 
             {          

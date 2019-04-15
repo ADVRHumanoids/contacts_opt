@@ -663,53 +663,55 @@ int main(int argc, char **argv)
     }
         
      
-     if (log)
-      logger->flush();
+    if (log)
+     logger->flush();
+     
+    return 0;
        
-//     pose_arm1_8.translation().x() += 0.15;
-//     ci.setBaseLink("arm1_8", "world");
-//     ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
-//     
-//     pose_arm2_8.translation().x() += 0.15;
-//     ci.setBaseLink("arm2_8", "world");
-//     ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
-//     ci.waitReachCompleted("arm2_8");
-// 
-// /* CoM-Force opt for pushing */    
-//     static_constr->SetExternalWrench(ext_w);
-//     
-//     ipopt.Solve(nlp_legs);
-//     x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
-//     
-//     p_opt_legs[4] = x_opt_legs[4].head(12);
-//     F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
-//     n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
-//     com_opt_legs[4] =  x_opt_legs[4].tail(3);
-//     
-//     w_T_com.translation() = com_opt_legs[4];
-//     ci.setTargetPose("com", w_T_com, 5.0);
-//     ci.waitReachCompleted("com");
-//     
-//     if (log) 
-//     {
-//         logger->add("x_sol_final", x_opt_legs[4]);
-//         logger->add("com_final", com_opt_legs[4]);
-//         logger->add("p_final", p_opt_legs[4]);
-//         logger->add("F_final", F_opt_legs[4]);
-//         logger->add("n_final", n_opt_legs[4]);
-//     }
-// 
-// /* Pushing */      
-//     ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
-//     ci.setBaseLink("arm1_8", "pelvis");
-//    
-//     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
-//     ci.setBaseLink("arm2_8", "pelvis");
-//         
-//    
-//     fpub.send_force( F_opt_legs[4] );
-//     fpub.send_normal( n_opt_legs[4] );
-//     fpub.send_wrench_manip(ext_w);
+    pose_arm1_8.translation().x() += 0.15;
+    ci.setBaseLink("arm1_8", "world");
+    ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
+    
+    pose_arm2_8.translation().x() += 0.15;
+    ci.setBaseLink("arm2_8", "world");
+    ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
+    ci.waitReachCompleted("arm2_8");
+
+/* CoM-Force opt for pushing */    
+    static_constr->SetExternalWrench(ext_w);
+    
+    ipopt.Solve(nlp_legs);
+    x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
+    
+    p_opt_legs[4] = x_opt_legs[4].head(12);
+    F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
+    n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
+    com_opt_legs[4] =  x_opt_legs[4].tail(3);
+    
+    w_T_com.translation() = com_opt_legs[4];
+    ci.setTargetPose("com", w_T_com, 5.0);
+    ci.waitReachCompleted("com");
+    
+    if (log) 
+    {
+        logger->add("x_sol_final", x_opt_legs[4]);
+        logger->add("com_final", com_opt_legs[4]);
+        logger->add("p_final", p_opt_legs[4]);
+        logger->add("F_final", F_opt_legs[4]);
+        logger->add("n_final", n_opt_legs[4]);
+    }
+
+/* Pushing */      
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
+    ci.setBaseLink("arm1_8", "pelvis");
+   
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
+    ci.setBaseLink("arm2_8", "pelvis");
+        
+   
+    fpub.send_force( F_opt_legs[4] );
+    fpub.send_normal( n_opt_legs[4] );
+    fpub.send_wrench_manip(ext_w);
     
 
     while (ros::ok()) 
