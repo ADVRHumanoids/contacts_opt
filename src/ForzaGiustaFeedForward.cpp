@@ -199,10 +199,15 @@ int main(int argc, char ** argv)
         model->setJointPosition(jmap);
         model->update();
         
+        Eigen::Affine3d fb_pose;
+        model->getFloatingBasePose(fb_pose);
+        
+        std::cout << fb_pose.linear() << std::endl;
+        
         /* Compute gcomp */
         model->computeGravityCompensation(tau);
-        tau -= tau_offset;
-        tau.head(6) += wrench_manip;
+//         tau -= tau_offset;
+//         tau.head(6) += wrench_manip;
        
         force_opt->compute(tau, f_ref_map, RotM_map, f_ForzaGiusta_map);
         

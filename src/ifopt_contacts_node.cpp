@@ -21,13 +21,35 @@ using namespace ifopt;
 void set_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
-    for(int i = 0; i < 4; i++)
+    
+    // dont send any impedance to the wheels
+    std::map<std::string, XBot::ControlMode> ctrl_map;
+    ctrl_map["j_wheel_1"] = XBot::ControlMode::Idle();
+    ctrl_map["j_wheel_2"] = XBot::ControlMode::Idle();
+    ctrl_map["j_wheel_3"] = XBot::ControlMode::Idle();
+    ctrl_map["j_wheel_4"] = XBot::ControlMode::Idle();
+    
+    robot->setControlMode(ctrl_map);
+    
+    Eigen::VectorXd K_0, K_end(6);
+    robot->leg(0).getStiffness(K_0);
+    K_end << 500, 500, 500, 150, 50, 0;
+    
+    const int N_ITER = 400;
+    for(int k = 0; k < N_ITER; k++)
     {
-        Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
-        leg_k << 500, 500, 500, 150, 50, 0;
-        robot->leg(i).setStiffness(leg_k);
+        for(int i = 0; i < 4; i++)
+        {
+            Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
+            leg_k = K_0 + k/(N_ITER-1)*(K_end-K_0);
+            robot->leg(i).setStiffness(leg_k);
+        }
+        
+        robot->move();
+        
+        ros::Duration(0.01).sleep();
     }
-    robot->move();
+   
 }
 
 
@@ -183,6 +205,7 @@ int main(int argc, char **argv)
     
     auto robot = XBot::RobotInterface::getRobot(config);
     robot->sense();
+
     
     auto model = ModelInterface::getModel(config);  
     model->update();
@@ -521,8 +544,11 @@ int main(int argc, char **argv)
     p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
 
     com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
+    
+    set_low_stiffness(robot);
 
-    for (int i : {0, 1, 2, 3})  
+    
+    for (int i : {0,1})  
     {
 
         cost->SetPosRef(p_ref, 0);
@@ -599,8 +625,6 @@ int main(int argc, char **argv)
         fpub.send_force(F_opt_legs[i]); 
         fpub.send_normal(n_opt_legs[i]);
         
-        set_low_stiffness(robot);
-
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
         ci.setTargetPose("com", w_T_com, 10.0);

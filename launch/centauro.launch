@@ -31,7 +31,7 @@
           
           <arg name="rate" value="$(arg rate)"/>
           
-          <param name="mu" value="0.9"/>
+          <param name="mu" value="0.85"/>
           
           <param name="log" type="bool" value="true"/>
                    
@@ -40,6 +40,9 @@
           
           <param name="links" type="yaml" 
                  value="[wheel_1, wheel_2, wheel_3, wheel_4]"/>
+                 
+          <param name="blacklist" type="yaml" 
+                 value="[j_wheel_1, j_wheel_2, j_wheel_3, j_wheel_4]"/>
           
     </node>
     

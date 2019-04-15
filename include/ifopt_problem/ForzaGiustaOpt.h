@@ -185,6 +185,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
      
      Eigen::Vector6d lowerLims, upperLims;
      lowerLims.setOnes(); lowerLims*=-1e3;
+//      lowerLims[2]=0;
      upperLims.setOnes(); upperLims*= 1e3;
      
      _Wrenches_limits = boost::make_shared<OpenSoT::constraints::force::WrenchesLimits>(_contact_links, lowerLims, upperLims, _wrenches);
@@ -213,7 +214,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
     
     _autostack->update(Eigen::VectorXd());
     
-    _solver = boost::make_shared<OpenSoT::solvers::iHQP>(_autostack->getStack(), _autostack->getBounds(), 1.0);
+    _solver = boost::make_shared<OpenSoT::solvers::iHQP>(_autostack->getStack(), _autostack->getBounds(), 1e6);
     
 }
 
@@ -236,6 +237,9 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
 
     bool all_inactive = true;
     
+    Eigen::Matrix6d weight;
+    weight.setIdentity();
+    
     for(const auto& pair : Fref_ifopt_map)
     {
             auto _wrench = _Wrenches->getWrenchTask(pair.first);
@@ -243,13 +247,15 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
             
                if(pair.second.norm() < 1e-12)
                {
-                   _wrench->setActive(true);
+                   _wrench->setWeight(1e3*weight);
+//                    _wrench->setActive(true);
+//                     all_inactive=false;
         
                }
                else
                {
-                   _wrench->setActive(false);
-                   all_inactive=false;
+                    _wrench->setWeight(weight);
+//                    _wrench->setActive(false);
                }
             
     }
