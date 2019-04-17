@@ -16,7 +16,7 @@ int main()
     
     Eigen::Vector3d tau_max(150.0, 150.0, 100.0);
     
-    q->SetBounds(-tau_max, 
+    tau->SetBounds(-tau_max, 
                  tau_max);
     
     Eigen::Vector3d d(0.40, 0.30, 0.20);
@@ -34,11 +34,11 @@ int main()
     nlp.AddCostSet(cost);
 
     ipopt.Solve(nlp);
-    auto x_opt = nlp.GetOptVariables()->GetValues();
-    
-    std::cout << x_opt << std::endl;
-    
+    auto x_opt = nlp.GetOptVariables()->GetValues();   
     auto q_value = x_opt.head<3>();
     auto tau_value = x_opt.tail<3>();
+    
+    std::cout << "q_value: " << q_value.transpose() << std::endl;
+    std::cout << "tau_value: " << tau_value.transpose() << std::endl;
     
 }
