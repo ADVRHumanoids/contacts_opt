@@ -20,6 +20,9 @@ using namespace ifopt;
 
 void set_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
+    
+    return;
+       
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
     // dont send any impedance to the wheels
@@ -33,7 +36,7 @@ void set_low_stiffness(XBot::RobotInterface::Ptr robot)
     
     Eigen::VectorXd K_0, K_end(6);
     robot->leg(0).getStiffness(K_0);
-    K_end << 500, 500, 500, 150, 50, 0;
+    K_end << 500, 500, 500, 250, 50, 0;
     
     const int N_ITER = 400;
     for(int k = 0; k < N_ITER; k++)
@@ -357,10 +360,17 @@ int main(int argc, char **argv)
 
     double delta = 0.3;
     
-    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),     wheel_1 + Eigen::Vector3d(delta, delta, delta));
-    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta, 0.0),   wheel_2 + Eigen::Vector3d(delta, 0.0, delta));
-    p3->SetBounds(wheel_3 - Eigen::Vector3d(delta, 0.0, 0.0),   wheel_3 + Eigen::Vector3d(0.0, delta, delta));
-    p4->SetBounds(wheel_4 - Eigen::Vector3d(delta, delta, 0.0), wheel_4 + Eigen::Vector3d(0.0, 0.0, delta));
+    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),     
+                  wheel_1 + Eigen::Vector3d(delta, delta, delta));
+    
+    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta, 0.0),   
+                  wheel_2 + Eigen::Vector3d(delta, 0.0, delta));
+    
+    p3->SetBounds(wheel_3 - Eigen::Vector3d(delta, 0.0, 0.0),   
+                  wheel_3 + Eigen::Vector3d(0.0, delta, delta));
+    
+    p4->SetBounds(wheel_4 - Eigen::Vector3d(delta, delta, 0.0), 
+                  wheel_4 + Eigen::Vector3d(0.0, 0.0, delta));
 
     nlp.AddVariableSet(F1);
     F1->SetBounds(-F_max, F_max);
@@ -509,7 +519,7 @@ int main(int argc, char **argv)
 
     nlp_legs.AddVariableSet(com);
 
-    double F_thr = 200; // magic number
+    double F_thr = 200; 
 
     fr_F1->set_F_thr(F_thr);
     fr_F2->set_F_thr(F_thr);
@@ -520,7 +530,7 @@ int main(int argc, char **argv)
     nlp_legs.AddConstraintSet(fr_F2);
     nlp_legs.AddConstraintSet(fr_F3);
     nlp_legs.AddConstraintSet(fr_F4);
-
+    
     std::vector< Eigen::VectorXd > x_opt_legs(5, Eigen::VectorXd::Zero(39));
     std::vector< Eigen::VectorXd > p_opt_legs(5, Eigen::VectorXd::Zero(12));
     std::vector< Eigen::VectorXd > F_opt_legs(5, Eigen::VectorXd::Zero(12));
@@ -537,23 +547,42 @@ int main(int argc, char **argv)
 
 
     nlp_legs.AddCostSet(cost);
-
-    p1->SetBounds(p_ref.head(3), p_ref.head(3));
-    p2->SetBounds(p_ref.segment<3> (3), p_ref.segment<3> (3));
-    p3->SetBounds(p_ref.segment<3> (6), p_ref.segment<3> (6));
-    p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
+    cost->SetPosRef(p_ref, 0);
+    cost->SetCOMRef(com_ref, 1);
+    cost->SetForceRef(0);
+    
+//     p1->SetBounds(p_ref.head(3), p_ref.head(3));
+//     p2->SetBounds(p_ref.segment<3> (3), p_ref.segment<3> (3));
+//     p3->SetBounds(p_ref.segment<3> (6), p_ref.segment<3> (6));
+//     p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
+    
+    // wheeled motion of non-lifting feet
+    nlp_legs.AddConstraintSet(SE_p1);
+    nlp_legs.AddConstraintSet(SE_p2);
+    nlp_legs.AddConstraintSet(SE_p3);
+    nlp_legs.AddConstraintSet(SE_p4);
+    
+    double delta_legs = 0.1;
+       
+    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),             
+                  wheel_1 + Eigen::Vector3d(delta_legs, delta_legs, delta_legs));
+    
+    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta_legs, 0.0),      
+                  wheel_2 + Eigen::Vector3d(delta_legs, 0.0, delta_legs));
+    
+    p3->SetBounds(wheel_3 - Eigen::Vector3d(delta_legs, 0.0, 0.0),        
+                  wheel_3 + Eigen::Vector3d(0.0, delta_legs, delta_legs));
+    
+    p4->SetBounds(wheel_4 - Eigen::Vector3d(delta_legs, delta_legs, 0.0), 
+                  wheel_4 + Eigen::Vector3d(0.0, 0.0, delta_legs));
+    
 
     com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
     
     set_low_stiffness(robot);
-
     
     for (int i : {0,1})  
     {
-
-        cost->SetPosRef(p_ref, 0);
-        cost->SetCOMRef(com_ref, 1);
-        cost->SetForceRef(0);
 
         // No force on the lifting leg 
         F_max *= 0;
@@ -561,8 +590,8 @@ int main(int argc, char **argv)
 
         fr_F[i]->set_F_thr(0);
         
-        // No position bound on the lifting leg
-        p[i]->SetBounds(-1e3*Eigen::Vector3d::Ones(), 1e3*Eigen::Vector3d::Ones());
+//         // No position bound on the lifting leg
+//         p[i]->SetBounds(-1e3*Eigen::Vector3d::Ones(), 1e3*Eigen::Vector3d::Ones());
         
         ipopt.Solve(nlp_legs);
         x_opt_legs[i] = nlp_legs.GetOptVariables()->GetValues();
@@ -597,10 +626,10 @@ int main(int argc, char **argv)
         // Put wheel on the ground, if super-ellipsoid is close to the ground 
         Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
         
-        if ((pi.z() - ground_z) <= 0.015)
-        {
-            pi.z() = ground_z;
-        }
+//         if ((pi.z() - ground_z) <= 0.015)
+//         {
+//             pi.z() = ground_z;
+//         }
 
         p[i]->SetBounds(pi, pi);
 
@@ -627,8 +656,66 @@ int main(int argc, char **argv)
         
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
-        ci.setTargetPose("com", w_T_com, 10.0);
-        ci.waitReachCompleted("com");
+        ci.setTargetPose("com", w_T_com, 5.0);
+//         ci.waitReachCompleted("com");
+        
+        // wheeled motion of non-lifting feet
+        if (i==0)
+        {
+            Eigen::Affine3d w_T_ankle1;
+            w_T_ankle1.translation() = p_opt_legs[i].segment<3>(3);
+            ci.setTargetPose(feet[1], w_T_ankle1, 5.0);
+            Eigen::Affine3d w_T_ankle2;
+            w_T_ankle2.translation() = p_opt_legs[i].segment<3>(6);
+            ci.setTargetPose(feet[2], w_T_ankle2, 5.0);
+            Eigen::Affine3d w_T_ankle3;
+            w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
+            ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
+            ci.waitReachCompleted(feet[3]);
+        }
+        
+        if (i==1)
+        {
+            Eigen::Affine3d w_T_ankle1;
+            w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
+            ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
+            Eigen::Affine3d w_T_ankle2;
+            w_T_ankle2.translation() = p_opt_legs[i].segment<3>(6);
+            ci.setTargetPose(feet[2], w_T_ankle2, 5.0);
+            Eigen::Affine3d w_T_ankle3;
+            w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
+            ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
+            ci.waitReachCompleted(feet[3]);
+        }
+        
+        if (i==2)
+        {
+            Eigen::Affine3d w_T_ankle1;
+            w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
+            ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
+            Eigen::Affine3d w_T_ankle2;
+            w_T_ankle2.translation() = p_opt_legs[i].segment<3>(3);
+            ci.setTargetPose(feet[1], w_T_ankle2, 5.0);
+            Eigen::Affine3d w_T_ankle3;
+            w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
+            ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
+            ci.waitReachCompleted(feet[3]);
+        }
+        
+        if (i==3)
+        {
+            Eigen::Affine3d w_T_ankle1;
+            w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
+            ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
+            Eigen::Affine3d w_T_ankle2;
+            w_T_ankle2.translation() = p_opt_legs[i].segment<3>(3);
+            ci.setTargetPose(feet[1], w_T_ankle2, 5.0);
+            Eigen::Affine3d w_T_ankle3;
+            w_T_ankle3.translation() = p_opt_legs[i].segment<3>(6);
+            ci.setTargetPose(feet[2], w_T_ankle3, 5.0);
+            ci.waitReachCompleted(feet[2]);
+        }
+        
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;

@@ -193,16 +193,16 @@ int main(int argc, char ** argv)
         ros::spinOnce();
         
         /* Sense robot state and update model */
-//         robot->sense(false);
-//         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
-//         model->setFloatingBaseState(imu);
-        model->setJointPosition(jmap);
-        model->update();
+        robot->sense(false);
+        model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
+        model->setFloatingBaseState(imu);
+//         model->setJointPosition(jmap);
+//         model->update();
         
         Eigen::Affine3d fb_pose;
         model->getFloatingBasePose(fb_pose);
         
-        std::cout << fb_pose.linear() << std::endl;
+//         std::cout << fb_pose.linear() << std::endl;
         
         /* Compute gcomp */
         model->computeGravityCompensation(tau);
