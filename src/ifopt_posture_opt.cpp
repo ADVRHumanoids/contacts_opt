@@ -24,7 +24,7 @@ int main()
     auto static_constr = std::make_shared<ifopt::StaticConstraint>(d);
     static_constr->SetExternalWrench(F);
     
-    auto cost = std::make_shared<ifopt::ExCost>();
+    auto cost = std::make_shared<ifopt::ExCost>(d);
     
     nlp.AddVariableSet(q);
     nlp.AddVariableSet(tau);
@@ -40,5 +40,10 @@ int main()
     
     std::cout << "q_value: " << q_value.transpose() << std::endl;
     std::cout << "tau_value: " << tau_value.transpose() << std::endl;
+    
+    Eigen::Vector2d p;
+    p[0] = d[0]*cos(q_value[0])+ d[1]*cos(q_value[0]+q_value[1])+ d[2]*cos(q_value[0]+q_value[1]+q_value[2]);
+    p[1] = d[0]*sin(q_value[0])+ d[1]*sin(q_value[0]+q_value[1])+ d[2]*sin(q_value[0]+q_value[1]+q_value[2]);
+    std::cout << "p: " << p.transpose() << std::endl;
     
 }

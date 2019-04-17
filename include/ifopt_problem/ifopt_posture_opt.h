@@ -86,7 +86,8 @@ class ExCost : public CostTerm
     
 public:
 
-    ExCost() : CostTerm ( "cost_term" )
+    ExCost(const Eigen::Vector3d& d) : CostTerm ( "cost_term" ),
+        _d(d)
     {
         _W.setIdentity();
     }
@@ -96,25 +97,33 @@ public:
     {
 
         Eigen::Vector3d tau = GetVariables()->GetComponent("tau")->GetValues();
-
-        return 0.5 * tau.dot(_W*tau);
+        Eigen::Vector3d q = GetVariables()->GetComponent("q")->GetValues();
+        
+        Eigen::MatrixXd J = ::get_jacobian(q, _d);  
+        
+        double manip = std::sqrt((J*J.transpose()).determinant());
+   
+        std::cout<< "manipulability measure: " << manip << std::endl;
+        
+        return manip;
+        
     };
 
     void FillJacobianBlock(std::string var_set, Jacobian& jac) const override
     {
-        std::cout << jac.rows() << jac.cols() << std::endl;
         jac.setZero();
         
-        if(var_set == "tau")
-        {
-            Eigen::Vector3d grad = _W * GetVariables()->GetComponent("tau")->GetValues();
-            jac = grad.transpose().sparseView();
-        }
+//         if(var_set == "tau")
+//         {
+//             Eigen::Vector3d grad = _W * GetVariables()->GetComponent("tau")->GetValues();
+//             jac = grad.transpose().sparseView();
+//         }
     }
 
 private:
     
     Eigen::Matrix3d _W;
+    Eigen::Vector3d _d;
 
 };
 
