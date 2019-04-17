@@ -9,7 +9,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 include(MacroYCMInstallLibrary)
 
 find_package(XCM REQUIRED)
-find_package(trajectory_utils REQUIRED)
 find_package(OpenSoT REQUIRED)
 find_package(PkgConfig)
 
@@ -75,6 +74,8 @@ add_executable(forza_giusta_node src/ForzaGiustaFeedForward.cpp)
 
 set_target_properties(ifopt_contacts_node PROPERTIES COMPILE_FLAGS -std=c++14)
 
+add_executable(ifopt_posture_opt src/ifopt_posture_opt.cpp)
+
 
 ##########
 ## Link ##
@@ -85,6 +86,14 @@ target_link_libraries(ifopt_contacts_node ${OpenSoT_LIBRARIES}
                                           ${ReflexxesTypeII_LIBRARIES}
                                           ${cartesian_interface_LIBRARIES}  
                                           ifopt::ifopt_ipopt)
+                                          
+target_link_libraries(ifopt_posture_opt ${OpenSoT_LIBRARIES}
+                                          ${XBotInterface_LIBRARIES}
+                                          ${catkin_LIBRARIES}
+                                          ${ReflexxesTypeII_LIBRARIES}
+                                          ${cartesian_interface_LIBRARIES}  
+                                          ifopt::ifopt_ipopt)
+                                          
 target_link_libraries(forza_giusta_node ${OpenSoT_LIBRARIES}
                                         ${XBotInterface_LIBRARIES}
                                         ${catkin_LIBRARIES}
