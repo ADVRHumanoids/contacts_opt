@@ -99,7 +99,7 @@ public:
         
         Eigen::MatrixXd J = ::get_jacobian(q, _d);  
         
-        double manip = std::sqrt((J*J.transpose()).determinant());
+        double manip = -std::sqrt((J*J.transpose()).determinant());
    
         std::cout<< "manipulability measure: " << manip << std::endl;
         
@@ -118,9 +118,9 @@ public:
             
             std::cout<< "manipulability jacobian: " << manip_J.transpose() << std::endl;
             
-            jac.coeffRef(0, 0) = manip_J[0];
-            jac.coeffRef(0, 1) = manip_J[1];
-            jac.coeffRef(0, 2) = manip_J[2];
+            jac.coeffRef(0, 0) = -manip_J[0];
+            jac.coeffRef(0, 1) = -manip_J[1];
+            jac.coeffRef(0, 2) = -manip_J[2];
             
         }
     }
