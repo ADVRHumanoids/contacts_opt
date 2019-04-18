@@ -88,15 +88,13 @@ public:
 
     ExCost(const Eigen::Vector3d& d) : CostTerm ( "cost_term" ),
         _d(d)
-    {
-        _W.setIdentity();
+    { 
     }
     
 
     double GetCost() const override
     {
 
-        Eigen::Vector3d tau = GetVariables()->GetComponent("tau")->GetValues();
         Eigen::Vector3d q = GetVariables()->GetComponent("q")->GetValues();
         
         Eigen::MatrixXd J = ::get_jacobian(q, _d);  
@@ -113,16 +111,22 @@ public:
     {
         jac.setZero();
         
-//         if(var_set == "tau")
-//         {
-//             Eigen::Vector3d grad = _W * GetVariables()->GetComponent("tau")->GetValues();
-//             jac = grad.transpose().sparseView();
-//         }
+        if(var_set == "q")
+        {
+            Eigen::Vector3d q = GetVariables()->GetComponent("q")->GetValues();
+            Eigen::Vector3d manip_J = ::get_manip_jacobian(q, _d); 
+            
+            std::cout<< "manipulability jacobian: " << manip_J.transpose() << std::endl;
+            
+            jac.coeffRef(0, 0) = manip_J[0];
+            jac.coeffRef(0, 1) = manip_J[1];
+            jac.coeffRef(0, 2) = manip_J[2];
+            
+        }
     }
 
 private:
     
-    Eigen::Matrix3d _W;
     Eigen::Vector3d _d;
 
 };
