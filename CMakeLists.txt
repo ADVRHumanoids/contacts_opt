@@ -71,6 +71,7 @@ include_directories(include
 ###########
 add_executable(ifopt_contacts_node src/ifopt_contacts_node.cpp)
 add_executable(forza_giusta_node src/ForzaGiustaFeedForward.cpp)
+add_executable(leg_lift_node src/leg_lift_node.cpp)
 
 set_target_properties(ifopt_contacts_node PROPERTIES COMPILE_FLAGS -std=c++14)
 
@@ -99,6 +100,12 @@ target_link_libraries(forza_giusta_node ${OpenSoT_LIBRARIES}
                                         ${catkin_LIBRARIES}
                                         ${ReflexxesTypeII_LIBRARIES}
                                         ${cartesian_interface_LIBRARIES})
+                                        
+target_link_libraries(leg_lift_node ${OpenSoT_LIBRARIES}
+                                          ${XBotInterface_LIBRARIES}
+                                          ${catkin_LIBRARIES}
+                                          ${ReflexxesTypeII_LIBRARIES}
+                                          ${cartesian_interface_LIBRARIES})                                        
 
 #############
 ## Install ##
@@ -111,6 +118,12 @@ install(TARGETS ifopt_contacts_node ifopt_contacts_node
 )
 
 install(TARGETS forza_giusta_node forza_giusta_node
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(TARGETS leg_lift_node leg_lift_node
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

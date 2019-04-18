@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 
     /* Init ROS node */
     ros::init(argc, argv, "ifopt_contacts_node");
-    ros::NodeHandle nh("ifopt_contacts");;
+    ros::NodeHandle nh("ifopt_contacts");
     ros::NodeHandle nh_priv("~");
     
     std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
