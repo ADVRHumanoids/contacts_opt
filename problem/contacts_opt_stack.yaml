@@ -84,7 +84,7 @@ Pelvis:
     distal_link: "pelvis"
     indices: [3, 4, 5]
     lambda: 0.05  
-    weight: 10.0
+    weight: 10.0 #1.0
     
 Postural:
     type: "Postural"
