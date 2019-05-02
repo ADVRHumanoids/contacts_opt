@@ -3,7 +3,7 @@
     <arg name="rate" default="10.0"/>
 
     <node pkg="contacts_opt" type="ifopt_contacts_node" name="ifopt_contacts_node" output="screen">
-        <param name="mu" value="0.5"/>
+        <param name="mu" value="0.4"/>
         <param name="is_model_floating_base" type="bool" value="true"/>
         <param name="model_type" value="RBDL"/>
         <param name="rate" value="$(arg rate)"/>  

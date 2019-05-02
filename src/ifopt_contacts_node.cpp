@@ -715,8 +715,12 @@ int main(int argc, char **argv)
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;
-        w_T_f1.translation().x() += 0.08;
-        w_T_f1.translation().z() += 0.1;
+	
+	if( (i==0) || (i==1) )
+	{
+// 	    w_T_f1.translation().x() += 0.08;
+	    w_T_f1.translation().z() += 0.2;
+	}
 
         Eigen::Affine3d w_T_f2;
         w_T_f2.translation() = pi;

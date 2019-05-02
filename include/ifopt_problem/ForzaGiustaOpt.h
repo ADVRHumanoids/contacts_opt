@@ -197,7 +197,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
 
     for(auto cl : _contact_links)
     {
-        friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (R,mu));
+        friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (R,_mu));
     }
     
     

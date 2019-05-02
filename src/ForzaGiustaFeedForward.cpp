@@ -47,16 +47,20 @@ void on_normal_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string
 
         double _tmp = std::sqrt( (msg->wrench.force.x*msg->wrench.force.x) + (msg->wrench.force.y*msg->wrench.force.y) );
 
-        R.coeffRef(0, 0) =  msg->wrench.force.y/_tmp;
-        R.coeffRef(0, 1) = -msg->wrench.force.x/_tmp;
+	Eigen::Matrix3d R_tmp;
+	
+        R_tmp.coeffRef(0, 0) =  msg->wrench.force.y/_tmp;
+        R_tmp.coeffRef(0, 1) = -msg->wrench.force.x/_tmp;
 
-        R.coeffRef(1, 0) = (msg->wrench.force.x * msg->wrench.force.z)/_tmp;
-        R.coeffRef(1, 1) = (msg->wrench.force.y * msg->wrench.force.z)/_tmp;
-        R.coeffRef(1, 2) = -_tmp;
+        R_tmp.coeffRef(1, 0) = (msg->wrench.force.x * msg->wrench.force.z)/_tmp;
+        R_tmp.coeffRef(1, 1) = (msg->wrench.force.y * msg->wrench.force.z)/_tmp;
+        R_tmp.coeffRef(1, 2) = -_tmp;
 
-        R.coeffRef(2, 0) = msg->wrench.force.x;
-        R.coeffRef(2, 1) = msg->wrench.force.y;
-        R.coeffRef(2, 2) = msg->wrench.force.z;
+        R_tmp.coeffRef(2, 0) =  msg->wrench.force.x;
+        R_tmp.coeffRef(2, 1) =  msg->wrench.force.y;
+        R_tmp.coeffRef(2, 2) =  msg->wrench.force.z;
+	
+	R = R_tmp.transpose();
     }
     
     g_Rmap_ptr->at(l) = R; 
@@ -221,8 +225,11 @@ int main(int argc, char ** argv)
             
             if (log) 
             {          
-                logger->add("F_ifopt_" + pair.first, f_world);
-                                      
+                logger->add("F_ifopt_" + pair.first, f_world);         
+		for (auto pair : RotM_map)
+		{
+		  logger->add("RotM_map_" + pair.first, pair.second);   
+		}
             }            
         }
         
