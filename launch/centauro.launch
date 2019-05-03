@@ -31,7 +31,7 @@
           
           <arg name="rate" value="$(arg rate)"/>
           
-          <param name="mu" value="0.4"/>
+          <param name="mu" value="0.5"/>
           
           <param name="log" type="bool" value="true"/>
                    

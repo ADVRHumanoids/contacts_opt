@@ -138,8 +138,7 @@ void ForzaGiusta::_log(XBot::MatLogger::Ptr logger)
         
         OpenSoT::tasks::Aggregated::Ptr min_force_aggr;
         
-        double _mu;
-        
+
     };
     
 }
@@ -152,8 +151,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
                                            double mu
                                           ):
     _model(model),
-    _contact_links(contact_links),
-    _mu(mu)
+    _contact_links(contact_links)
 {
     /* Do we want to consider contact torques? */
     const bool optimize_contact_torque = false;
@@ -197,7 +195,7 @@ forza_giusta::ForceOptimization::ForceOptimization(XBot::ModelInterface::Ptr mod
 
     for(auto cl : _contact_links)
     {
-        friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (R,_mu));
+        friction_cones.push_back(std::pair<Eigen::Matrix3d,double> (R,mu));
     }
     
     
@@ -223,12 +221,7 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
                                       const std::map<std::string, Eigen::Vector6d>& Fref_ifopt_map,
                                       const std::map<std::string, Eigen::Matrix3d>& RotM_ifopt,
                                       std::map<std::string, Eigen::Vector6d>& Fc_map)
-{
-    
-    for(auto l : _contact_links)
-    {
-        Fc_map[l] = Eigen::Vector6d::Zero();
-    }
+{    
     
     std::vector<Eigen::Vector6d> Fc;
     Fc.resize(_contact_links.size());
@@ -248,14 +241,11 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
                if(pair.second.norm() < 1e-12)
                {
                    _wrench->setWeight(1e3*weight);
-//                    _wrench->setActive(true);
-//                     all_inactive=false;
         
                }
                else
                {
                     _wrench->setWeight(weight);
-//                    _wrench->setActive(false);
                }
             
     }
@@ -264,8 +254,8 @@ bool forza_giusta::ForceOptimization::compute(const Eigen::VectorXd& fixed_base_
     {
         for(const auto& pair : Fref_ifopt_map)
         {         
-               auto _wrench = _Wrenches->getWrenchTask(pair.first);           
-               _wrench->setActive(true);             
+               auto _wrench = _Wrenches->getWrenchTask(pair.first);   
+	       _wrench->setWeight(weight);            
         }
     }
         

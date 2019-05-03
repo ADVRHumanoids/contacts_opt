@@ -274,7 +274,7 @@ int main(int argc, char **argv)
          20.0, 
          pelvis.z() - ground_z;
     
-    P << 20, 20, 20; 
+    P << 10, 10, 10; // 20, 20, 20;
 
     if (log) 
     {
@@ -555,32 +555,11 @@ int main(int argc, char **argv)
     p2->SetBounds(p_ref.segment<3> (3), p_ref.segment<3> (3));
     p3->SetBounds(p_ref.segment<3> (6), p_ref.segment<3> (6));
     p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
-    
-//     // wheeled motion of non-lifting feet
-//     nlp_legs.AddConstraintSet(SE_p1);
-//     nlp_legs.AddConstraintSet(SE_p2);
-//     nlp_legs.AddConstraintSet(SE_p3);
-//     nlp_legs.AddConstraintSet(SE_p4);
-    
-//     double delta_legs = 0.1;
-//        
-//     p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),             
-//                   wheel_1 + Eigen::Vector3d(delta_legs, delta_legs, delta_legs));
-//     
-//     p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta_legs, 0.0),      
-//                   wheel_2 + Eigen::Vector3d(delta_legs, 0.0, delta_legs));
-//     
-//     p3->SetBounds(wheel_3 - Eigen::Vector3d(delta_legs, 0.0, 0.0),        
-//                   wheel_3 + Eigen::Vector3d(0.0, delta_legs, delta_legs));
-//     
-//     p4->SetBounds(wheel_4 - Eigen::Vector3d(delta_legs, delta_legs, 0.0), 
-//                   wheel_4 + Eigen::Vector3d(0.0, 0.0, delta_legs));
-    
 
     com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
     
     set_low_stiffness(robot);
-    
+   
     for (int i : {0,1,2,3})  
     {
 
@@ -648,93 +627,46 @@ int main(int argc, char **argv)
         R.coeffRef(2, 2) = ni.z();
         
         fpub.send_force(F_opt_legs[i]); 
-        fpub.send_normal(n_opt_legs[i]);
+	fpub.send_normal(n_opt_legs[i]);
         
         Eigen::Affine3d w_T_com;
         w_T_com.translation() = com_opt_legs[i];
         ci.setTargetPose("com", w_T_com, 5.0);
         ci.waitReachCompleted("com");
-        
-//         // wheeled motion of non-lifting feet
-//         if (i==0)
-//         {
-//             Eigen::Affine3d w_T_ankle1;
-//             w_T_ankle1.translation() = p_opt_legs[i].segment<3>(3);
-//             ci.setTargetPose(feet[1], w_T_ankle1, 5.0);
-//             Eigen::Affine3d w_T_ankle2;
-//             w_T_ankle2.translation() = p_opt_legs[i].segment<3>(6);
-//             ci.setTargetPose(feet[2], w_T_ankle2, 5.0);
-//             Eigen::Affine3d w_T_ankle3;
-//             w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
-//             ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
-//             ci.waitReachCompleted(feet[3]);
-//         }
-//         
-//         if (i==1)
-//         {
-//             Eigen::Affine3d w_T_ankle1;
-//             w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
-//             ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
-//             Eigen::Affine3d w_T_ankle2;
-//             w_T_ankle2.translation() = p_opt_legs[i].segment<3>(6);
-//             ci.setTargetPose(feet[2], w_T_ankle2, 5.0);
-//             Eigen::Affine3d w_T_ankle3;
-//             w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
-//             ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
-//             ci.waitReachCompleted(feet[3]);
-//         }
-//         
-//         if (i==2)
-//         {
-//             Eigen::Affine3d w_T_ankle1;
-//             w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
-//             ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
-//             Eigen::Affine3d w_T_ankle2;
-//             w_T_ankle2.translation() = p_opt_legs[i].segment<3>(3);
-//             ci.setTargetPose(feet[1], w_T_ankle2, 5.0);
-//             Eigen::Affine3d w_T_ankle3;
-//             w_T_ankle3.translation() = p_opt_legs[i].segment<3>(9);
-//             ci.setTargetPose(feet[3], w_T_ankle3, 5.0);
-//             ci.waitReachCompleted(feet[3]);
-//         }
-//         
-//         if (i==3)
-//         {
-//             Eigen::Affine3d w_T_ankle1;
-//             w_T_ankle1.translation() = p_opt_legs[i].segment<3>(0);
-//             ci.setTargetPose(feet[0], w_T_ankle1, 5.0);
-//             Eigen::Affine3d w_T_ankle2;
-//             w_T_ankle2.translation() = p_opt_legs[i].segment<3>(3);
-//             ci.setTargetPose(feet[1], w_T_ankle2, 5.0);
-//             Eigen::Affine3d w_T_ankle3;
-//             w_T_ankle3.translation() = p_opt_legs[i].segment<3>(6);
-//             ci.setTargetPose(feet[2], w_T_ankle3, 5.0);
-//             ci.waitReachCompleted(feet[2]);
-//         }
-        
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;
 	
 	if( (i==0) || (i==1) )
 	{
-// 	    w_T_f1.translation().x() += 0.08;
 	    w_T_f1.translation().z() += 0.2;
+	
+	    Eigen::Affine3d w_T_f2;
+	    w_T_f2.translation() = pi;
+
+	    Trajectory::WayPointVector wp;
+	    wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
+	    wp.emplace_back(w_T_f2, 4.0);
+	    ci.setWayPoints(feet[i], wp);
+	    Eigen::Affine3d a_T_f;
+	    a_T_f.translation() = ni;
+	    a_T_f.linear() =  R.transpose();
+	    ci.setTargetPose(ankle[i], a_T_f, 2.0);
+	    ci.waitReachCompleted(feet[i]);
+	    ci.waitReachCompleted(ankle[i]);
 	}
-
-        Eigen::Affine3d w_T_f2;
-        w_T_f2.translation() = pi;
-
-        Trajectory::WayPointVector wp;
-        wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
-        wp.emplace_back(w_T_f2, 4.0);
-        ci.setWayPoints(feet[i], wp);
-        Eigen::Affine3d a_T_f;
-        a_T_f.translation() = ni;
-        a_T_f.linear() =  R.transpose();
-        ci.setTargetPose(ankle[i], a_T_f, 5.0);
-        ci.waitReachCompleted(feet[i]);
-        ci.waitReachCompleted(ankle[i]);
+	else
+	{
+	    ci.setTargetPose(feet[i], w_T_f1, 6.0);
+	    Eigen::Affine3d a_T_f;
+	    a_T_f.translation() = ni;
+	    a_T_f.linear() =  R.transpose();
+	    ci.setTargetPose(ankle[i], a_T_f, 4.0);
+	    if(i==3)
+	      fpub.send_normal(n_opt);
+	    ci.waitReachCompleted(ankle[i]);
+	}
+	
 
         if (log) 
         {
@@ -748,8 +680,10 @@ int main(int argc, char **argv)
         
 
     }
-        
-     
+    
+    fpub.send_force(Eigen::VectorXd::Zero(12)); 
+  
+      
     if (log)
      logger->flush();
      
@@ -798,7 +732,7 @@ int main(int argc, char **argv)
    
     fpub.send_force( F_opt_legs[4] );
     fpub.send_normal( n_opt_legs[4] );
-    fpub.send_wrench_manip(ext_w);
+    fpub.send_wrench_manip(ext_w); 
     
 
     while (ros::ok()) 
