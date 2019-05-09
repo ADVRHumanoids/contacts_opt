@@ -2,21 +2,21 @@
 #include <cartesian_interface/CartesianInterfaceImpl.h>
 #include <cartesian_interface/ros/RosServerClass.h>
 #include <cartesian_interface/problem/Com.h>
-
 #include <XBotInterface/RobotInterface.h>
 #include <RobotInterfaceROS/ConfigFromParam.h>
-
 #include <cartesian_interface/ros/RosImpl.h>
-
 #include <ifopt/problem.h>
 #include <ifopt/ipopt_solver.h>
 #include <ifopt_problem/ifopt_contacts.h>
-
 #include <signal.h>
+#include <ifopt_problem/ForcePublisher.h>
 
 using namespace XBot;
 using namespace XBot::Cartesian;
 using namespace ifopt;
+
+XBot::MatLogger::Ptr logger;
+std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 
 void set_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
@@ -55,267 +55,14 @@ void set_low_stiffness(XBot::RobotInterface::Ptr robot)
    
 }
 
-
-class ForcePublisher
+void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eigen::Vector3d &F_max, const Eigen::Vector3d &C, const Eigen::Vector3d &R, const Eigen::Vector3d &P, 
+		       const Eigen::VectorXd &p_ref, double &Wp, const Eigen::Vector3d &com_ref, double &Wcom, double &m, double &mu, const Eigen::Vector6d &ext_w, Eigen::VectorXd &x_opt)
 {
-  
-public:
-    
-    ForcePublisher(std::vector<std::string> feet);
-    
-    void send_force(const Eigen::VectorXd& f_opt);
-    void send_normal(const Eigen::VectorXd& n_opt);
-    void send_wrench_manip(const Eigen::VectorXd& tau_opt);
-    
-private:
-    
-    std::vector<ros::Publisher> _pubs_force;
-    std::vector<ros::Publisher> _pubs_normal;
-    ros::Publisher _pub_wrench_manip;
-    
-};
-
-ForcePublisher::ForcePublisher(std::vector<std::string> feet)
-{
-    ros::NodeHandle nh;
-    
-    
-    for(auto l : feet)
-    {
-        _pubs_force.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/force_ref/" + l, 1) );
-        _pubs_normal.push_back( nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/normal/" + l, 1) );
-    }
-    
-    _pub_wrench_manip = nh.advertise<geometry_msgs::WrenchStamped>("forza_giusta/wrench_manip/", 1);
-    
-}
-
-void ForcePublisher::send_force(const Eigen::VectorXd &f_opt)
-{
-     
-    for (int i : {0, 1, 2, 3}) 
-    {
-        Eigen::Vector3d f =  f_opt.segment<3>(3*i);
-            
-        geometry_msgs::WrenchStamped msg;
-        msg.header.frame_id = "world";
-        msg.header.stamp = ros::Time::now();        
-        msg.wrench.force.x = f.x();
-        msg.wrench.force.y = f.y();
-        msg.wrench.force.z = f.z();
-       
-       _pubs_force[i].publish(msg);
-        
-    }
-    
-}
-
-void ForcePublisher::send_normal(const Eigen::VectorXd &n_opt)
-{
-     
-    for (int i : {0, 1, 2, 3}) 
-    {
-        Eigen::Vector3d n =  n_opt.segment<3>(3*i);
-            
-        geometry_msgs::WrenchStamped msg;
-        msg.header.frame_id = "world";
-        msg.header.stamp = ros::Time::now();        
-        msg.wrench.force.x = n.x();
-        msg.wrench.force.y = n.y();
-        msg.wrench.force.z = n.z();
-       
-       _pubs_normal[i].publish(msg);
-        
-    }
-    
-}
-
-void ForcePublisher::send_wrench_manip(const Eigen::VectorXd& tau_opt)
-{
-              
-        geometry_msgs::WrenchStamped msg;
-        msg.header.frame_id = "world";
-        msg.header.stamp = ros::Time::now();        
-        msg.wrench.force.x = tau_opt.x();
-        msg.wrench.force.y = tau_opt.y();
-        msg.wrench.force.z = tau_opt.z();
-        msg.wrench.torque.x = tau_opt[3];
-        msg.wrench.torque.y = tau_opt[4];
-        msg.wrench.torque.z = tau_opt[5];
-       
-       _pub_wrench_manip.publish(msg);
-        
-    
-}
-
-
-XBot::MatLogger::Ptr logger;
-
-void sighandler(int sig)
-{   
-    if (log)
-      logger->flush();
-}
-
-float sign (Eigen::Vector3d p1, Eigen::Vector3d p2, Eigen::Vector3d p3)
-{
-    return (p1.x() - p3.x()) * (p2.y() - p3.y()) - (p2.x() - p3.x()) * (p1.y() - p3.y());
-}
-
-bool PointInTriangle (Eigen::Vector3d pt, Eigen::Vector3d v1, Eigen::Vector3d v2, Eigen::Vector3d v3)
-{
-    float d1, d2, d3;
-    bool has_neg, has_pos;
-
-    d1 = sign(pt, v1, v2);
-    d2 = sign(pt, v2, v3);
-    d3 = sign(pt, v3, v1);
-
-    has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
-    has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
-
-    return !(has_neg && has_pos);
-}
-
-
-
-
-int main(int argc, char **argv)
-{
-    
-    signal(SIGABRT, &sighandler);
-    signal(SIGTERM, &sighandler);
-    signal(SIGINT, &sighandler);
-
-    /* Init ROS node */
-    ros::init(argc, argv, "ifopt_contacts_node");
-    ros::NodeHandle nh("ifopt_contacts");
-    ros::NodeHandle nh_priv("~");
-    
-    std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
-    std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
-    
-    ForcePublisher fpub(feet);
-
-    XBot::Cartesian::RosImpl ci;   
-
-    double rate = nh_priv.param("rate", 100.0);
-    double mu = nh_priv.param("mu", 0.5);
-        
-    ros::Rate loop_rate(rate);
-
-    ConfigOptions config = XBot::ConfigOptionsFromParamServer();
-    
-    auto robot = XBot::RobotInterface::getRobot(config);
-    robot->sense();
-
-    
-    auto model = ModelInterface::getModel(config);  
-    model->update();
-
-    bool log;
-    nh_priv.param("log", log, false);
-    
-    std::stringstream ss;
-    ss << "/tmp/ifopt_node";
-
-    if (log)
-        logger = XBot::MatLogger::getLogger(ss.str());
-
-
-    Eigen::Affine3d pose;
-    
-    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-    pose.translation().z() -= 0.1;
-    Eigen::Vector3d com_ref = pose.translation();
-    ci.setTargetPose("com", pose, 2.0);
-    ci.waitReachCompleted("com");
-
-    ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
-    Eigen::Vector3d pelvis = pose.translation();
-    
-    double wheel_offset_x = 0.35;
-    double wheel_offset_y = 0.35;
-
-    ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_1 = pose.translation();
-    wheel_1.x() =  pelvis.x() + wheel_offset_x;
-    wheel_1.y() =  pelvis.y() + wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_2 = pose.translation();
-    wheel_2.x() =  pelvis.x() + wheel_offset_x;
-    wheel_2.y() =  pelvis.y() - wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_3 = pose.translation();
-    wheel_3.x() =  pelvis.x() - wheel_offset_x;
-    wheel_3.y() =  pelvis.y() + wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_4 = pose.translation();
-    wheel_4.x() =  pelvis.x() - wheel_offset_x;
-    wheel_4.y() =  pelvis.y() - wheel_offset_y;
-    
-    Eigen::Affine3d pose_arm1_8, pose_arm2_8;
-    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose_arm1_8);       
-    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose_arm2_8);
-
-    double ground_z = wheel_1.z();  
-
-/* Environment super-ellipsoid parameters*/ 
-    Eigen::Vector3d C, R, P;
-    
-    C << pelvis.x() + 20.0, 
-         pelvis.y(), 
-         pelvis.z();
-         
-    R << C.x() + 0.6, 
-         20.0, 
-         pelvis.z() - ground_z;
-    
-    P << 10, 10, 10; // 20, 20, 20;
-
-    if (log) 
-    {
-        logger->add("C", C);
-        logger->add("R", R);
-        logger->add("P", P);
-    }
-    
-
-/* Initial desired wheel position on the ground*/
-    Eigen::VectorXd p_ref;
-    p_ref.setZero(12);
-
-    p_ref.head(3) = wheel_1;
-    p_ref.segment<3> (3) = wheel_2;
-    p_ref.segment<3> (6) = wheel_3;
-    p_ref.tail(3) = wheel_4;
-
-
     Problem nlp;
     IpoptSolver ipopt;
     ipopt.SetOption("derivative_test", "first-order");
     
-    Eigen::VectorXd x_opt;
     x_opt.setZero(39);
-    Eigen::VectorXd p_opt;
-    x_opt.setZero(12);
-    Eigen::VectorXd F_opt;
-    x_opt.setZero(12);
-    Eigen::VectorXd n_opt;
-    x_opt.setZero(12);
-    Eigen::VectorXd com_opt;
-    x_opt.setZero(3);
-
-    Eigen::VectorXd ext_w;
-    ext_w.setZero(6);
-    ext_w << 1000, 0, 0, 0, 0, 0.0;
-
-    Eigen::Vector3d F_max;
-    F_max.setOnes();
-    F_max *= 500;
 
     auto p1 = std::make_shared<ExVariables> ("p1");
     auto p2 = std::make_shared<ExVariables> ("p2");
@@ -357,20 +104,11 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(p2);
     nlp.AddVariableSet(p3);
     nlp.AddVariableSet(p4);
-
-    double delta = 0.3;
     
-    p1->SetBounds(wheel_1 - Eigen::Vector3d(0.0, 0.0, 0.0),     
-                  wheel_1 + Eigen::Vector3d(delta, delta, delta));
-    
-    p2->SetBounds(wheel_2 - Eigen::Vector3d(0.0, delta, 0.0),   
-                  wheel_2 + Eigen::Vector3d(delta, 0.0, delta));
-    
-    p3->SetBounds(wheel_3 - Eigen::Vector3d(delta, 0.0, 0.0),   
-                  wheel_3 + Eigen::Vector3d(0.0, delta, delta));
-    
-    p4->SetBounds(wheel_4 - Eigen::Vector3d(delta, delta, 0.0), 
-                  wheel_4 + Eigen::Vector3d(0.0, 0.0, delta));
+    p1->SetBounds(p_bounds[0].head(3), p_bounds[0].tail(3));    
+    p2->SetBounds(p_bounds[1].head(3), p_bounds[1].tail(3));
+    p3->SetBounds(p_bounds[2].head(3), p_bounds[2].tail(3));
+    p4->SetBounds(p_bounds[3].head(3), p_bounds[3].tail(3));
 
     nlp.AddVariableSet(F1);
     F1->SetBounds(-F_max, F_max);
@@ -387,8 +125,7 @@ int main(int argc, char **argv)
     nlp.AddVariableSet(n4);
 
     nlp.AddVariableSet(com);
-
-    double m = model->getMass();
+    
     static_constr->SetMass(m);
     static_constr->SetExternalWrench(ext_w);
     nlp.AddConstraintSet(static_constr);
@@ -421,17 +158,304 @@ int main(int argc, char **argv)
     nlp.AddConstraintSet(n_p4);
 
     
-    double Wp = 10;
     cost->SetPosRef(p_ref, Wp);
     
-    double Wcom = 100;
     cost->SetCOMRef(com_ref, Wcom);
 
     nlp.AddCostSet(cost);
-
+    
     ipopt.Solve(nlp);
     x_opt = nlp.GetOptVariables()->GetValues();
+       
+}
 
+void solve_transition_opt(const std::vector <Eigen::Vector6d> &p_bounds, const std::vector <Eigen::Vector6d> &n_bounds, Eigen::Vector6d &com_bounds, const std::vector <Eigen::Vector6d> &F_bounds,
+			  const Eigen::VectorXd &F_thr, const Eigen::VectorXd &p_ref, const Eigen::Vector3d &com_ref, double &m, double &mu, const Eigen::Vector6d &ext_w, Eigen::VectorXd &x_opt)
+{
+    Problem nlp;
+    IpoptSolver ipopt;
+    ipopt.SetOption("derivative_test", "first-order");
+    
+    x_opt.setZero(39);
+
+    auto p1 = std::make_shared<ExVariables> ("p1");
+    auto p2 = std::make_shared<ExVariables> ("p2");
+    auto p3 = std::make_shared<ExVariables> ("p3");
+    auto p4 = std::make_shared<ExVariables> ("p4");
+
+    auto F1 = std::make_shared<ExVariables> ("F1");
+    auto F2 = std::make_shared<ExVariables> ("F2");
+    auto F3 = std::make_shared<ExVariables> ("F3");
+    auto F4 = std::make_shared<ExVariables> ("F4");
+
+    auto n1 = std::make_shared<ExVariables> ("n1");
+    auto n2 = std::make_shared<ExVariables> ("n2");
+    auto n3 = std::make_shared<ExVariables> ("n3");
+    auto n4 = std::make_shared<ExVariables> ("n4");
+
+    auto com = std::make_shared<ExVariables> ("com");
+
+    auto static_constr = std::make_shared<StaticConstraint>();
+
+    auto fr_F1 = std::make_shared<FrictionConstraint> ("F1");
+    auto fr_F2 = std::make_shared<FrictionConstraint> ("F2");
+    auto fr_F3 = std::make_shared<FrictionConstraint> ("F3");
+    auto fr_F4 = std::make_shared<FrictionConstraint> ("F4");
+
+    auto n_p1 = std::make_shared<NormalConstraint> ("p1");
+    auto n_p2 = std::make_shared<NormalConstraint> ("p2");
+    auto n_p3 = std::make_shared<NormalConstraint> ("p3");
+    auto n_p4 = std::make_shared<NormalConstraint> ("p4");
+
+    auto cost = std::make_shared<ExCost>();
+
+    nlp.AddVariableSet(p1);
+    nlp.AddVariableSet(p2);
+    nlp.AddVariableSet(p3);
+    nlp.AddVariableSet(p4);
+    
+    nlp.AddVariableSet(F1);
+    nlp.AddVariableSet(F2);
+    nlp.AddVariableSet(F3);
+    nlp.AddVariableSet(F4);
+    
+    nlp.AddVariableSet(n1);
+    nlp.AddVariableSet(n2);
+    nlp.AddVariableSet(n3);
+    nlp.AddVariableSet(n4);
+    
+    nlp.AddVariableSet(com);
+    
+    p1->SetBounds(p_bounds[0].head(3), p_bounds[0].tail(3));    
+    p2->SetBounds(p_bounds[1].head(3), p_bounds[1].tail(3));
+    p3->SetBounds(p_bounds[2].head(3), p_bounds[2].tail(3));
+    p4->SetBounds(p_bounds[3].head(3), p_bounds[3].tail(3));
+
+    F1->SetBounds(F_bounds[0].head(3), F_bounds[0].tail(3));
+    F2->SetBounds(F_bounds[1].head(3), F_bounds[1].tail(3));
+    F3->SetBounds(F_bounds[2].head(3), F_bounds[2].tail(3));
+    F4->SetBounds(F_bounds[3].head(3), F_bounds[3].tail(3));
+   
+    n1->SetBounds(n_bounds[0].head(3), n_bounds[0].tail(3));    
+    n2->SetBounds(n_bounds[1].head(3), n_bounds[1].tail(3));
+    n3->SetBounds(n_bounds[2].head(3), n_bounds[2].tail(3));
+    n4->SetBounds(n_bounds[3].head(3), n_bounds[3].tail(3));
+
+    com->SetBounds(com_bounds.head(3), com_bounds.tail(3));
+    
+    static_constr->SetMass(m);
+    static_constr->SetExternalWrench(ext_w);
+    nlp.AddConstraintSet(static_constr);
+    
+    fr_F1->set_mu(mu); fr_F1->set_F_thr(F_thr[0]);
+    fr_F2->set_mu(mu); fr_F2->set_F_thr(F_thr[1]);
+    fr_F3->set_mu(mu); fr_F3->set_F_thr(F_thr[2]);
+    fr_F4->set_mu(mu); fr_F4->set_F_thr(F_thr[3]);
+    nlp.AddConstraintSet(fr_F1);
+    nlp.AddConstraintSet(fr_F2);
+    nlp.AddConstraintSet(fr_F3);
+    nlp.AddConstraintSet(fr_F4);
+
+    nlp.AddCostSet(cost);
+    cost->SetPosRef(p_ref, 0);
+    cost->SetCOMRef(com_ref, 1);
+    cost->SetForceRef(0);
+
+    nlp.AddCostSet(cost);
+    
+    ipopt.Solve(nlp);
+    x_opt = nlp.GetOptVariables()->GetValues();
+    
+    
+}
+
+void compute_RotM(const Eigen::Vector3d &ni, Eigen::Matrix3d &R)
+{
+  
+        R.setZero();
+
+        R.coeffRef(0, 0) =  ni.y() / ((ni.head(2)).norm());
+        R.coeffRef(0, 1) = -ni.x() / ((ni.head(2)).norm());
+
+        R.coeffRef(1, 0) = (ni.x() * ni.z()) / ((ni.head(2)).norm());
+        R.coeffRef(1, 1) = (ni.y() * ni.z()) / ((ni.head(2)).norm());
+        R.coeffRef(1, 2) = - (ni.head(2)).norm();
+
+        R.coeffRef(2, 0) = ni.x();
+        R.coeffRef(2, 1) = ni.y();
+        R.coeffRef(2, 2) = ni.z();
+  
+}
+
+void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
+{
+//     std::cout << __PRETTY_FUNCTION__ << std::endl;
+//     std::cout << *msg << std::endl;
+    tf::wrenchMsgToEigen(msg->wrench, g_fmap_ptr->at(l));
+}
+
+
+void sighandler(int sig)
+{   
+    if (log)
+      logger->flush();
+}
+
+
+int main(int argc, char **argv)
+{
+    
+    signal(SIGABRT, &sighandler);
+    signal(SIGTERM, &sighandler);
+    signal(SIGINT, &sighandler);
+
+    /* Init ROS node */
+    ros::init(argc, argv, "ifopt_contacts_node");
+    ros::NodeHandle nh("ifopt_contacts");
+    ros::NodeHandle nh_priv("~");
+    
+    std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
+    std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
+    
+    force_publisher::ForcePublisher fpub(feet);
+
+    XBot::Cartesian::RosImpl ci;  
+
+    double rate = nh_priv.param("rate", 100.0);
+    double mu = nh_priv.param("mu", 0.5);
+        
+    ros::Rate loop_rate(rate);
+
+    ConfigOptions config = XBot::ConfigOptionsFromParamServer();
+    
+    auto robot = XBot::RobotInterface::getRobot(config);
+    robot->sense();
+    
+    auto model = ModelInterface::getModel(config);  
+    model->update();
+
+    bool log;
+    nh_priv.param("log", log, false);
+    
+    std::stringstream ss;
+    ss << "/tmp/ifopt_node";
+
+    if (log)
+        logger = XBot::MatLogger::getLogger(ss.str());
+
+    Eigen::Affine3d pose;
+    
+    /* Lower the homing CoM */
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().z() -= 0.05;
+    Eigen::Vector3d com_ref = pose.translation();
+    ci.setTargetPose("com", pose, 2.0);
+    ci.waitReachCompleted("com");
+
+    ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
+    Eigen::Vector3d pelvis = pose.translation();
+    
+    double wheel_offset_x = 0.35;
+    double wheel_offset_y = 0.35;
+
+    ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
+    Eigen::Vector3d wheel_1 = pose.translation();
+    wheel_1.x() =  pelvis.x() + wheel_offset_x;
+    wheel_1.y() =  pelvis.y() + wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
+    Eigen::Vector3d wheel_2 = pose.translation();
+    wheel_2.x() =  pelvis.x() + wheel_offset_x;
+    wheel_2.y() =  pelvis.y() - wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
+    Eigen::Vector3d wheel_3 = pose.translation();
+    wheel_3.x() =  pelvis.x() - wheel_offset_x;
+    wheel_3.y() =  pelvis.y() + wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
+    Eigen::Vector3d wheel_4 = pose.translation();
+    wheel_4.x() =  pelvis.x() - wheel_offset_x;
+    wheel_4.y() =  pelvis.y() - wheel_offset_y;
+    
+    Eigen::Affine3d pose_arm1_8, pose_arm2_8;
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose_arm1_8);       
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose_arm2_8);
+
+    double ground_z = wheel_1.z();  
+
+    /* Environment super-ellipsoid parameters*/ 
+    Eigen::Vector3d C, R, P;
+    
+    C << pelvis.x() + 20.0, 
+         pelvis.y(), 
+         pelvis.z();
+         
+    R << C.x() + 0.6, 
+         20.0, 
+         pelvis.z() - ground_z;
+    
+    P << 10, 10, 10;
+
+    if (log) 
+    {
+        logger->add("C", C);
+        logger->add("R", R);
+        logger->add("P", P);
+    }
+    
+
+    /* Initial desired wheel position on the ground*/
+    Eigen::VectorXd p_ref;
+    p_ref.setZero(12);
+
+    p_ref.head(3) = wheel_1;
+    p_ref.segment<3>(3) = wheel_2;
+    p_ref.segment<3>(6) = wheel_3;
+    p_ref.tail(3) = wheel_4;
+
+    Eigen::VectorXd x_opt;   x_opt.setZero(39);
+    Eigen::VectorXd p_opt;   p_opt.setZero(12);
+    Eigen::VectorXd F_opt;   F_opt.setZero(12);
+    Eigen::VectorXd n_opt;   n_opt.setZero(12);
+    Eigen::VectorXd com_opt; com_opt.setZero(3);
+
+    Eigen::VectorXd ext_w;
+    ext_w.setZero(6);
+    ext_w << 1200, 0, 0, 0, 0, 0.0;
+
+    Eigen::Vector3d F_max;
+    F_max.setOnes();
+    F_max *= 500;
+      
+    Eigen::Vector6d p1_bounds, p2_bounds, p3_bounds, p4_bounds;
+    double delta = 0.3;
+    
+    p1_bounds.setZero(); 
+    p1_bounds.head(3) = wheel_1; 
+    p1_bounds.tail(3) = wheel_1 + Eigen::Vector3d(delta, delta, delta);
+    
+    p2_bounds.setZero(); 
+    p2_bounds.head(3) = wheel_2 - Eigen::Vector3d(0.0, delta, 0.0); 
+    p2_bounds.tail(3) = wheel_2 + Eigen::Vector3d(delta, 0.0, delta);
+    
+    p3_bounds.setZero(); 
+    p3_bounds.head(3) = wheel_3 - Eigen::Vector3d(delta, 0.0, 0.0); 
+    p3_bounds.tail(3) = wheel_3 + Eigen::Vector3d(0.0, delta, delta);
+    
+    p4_bounds.setZero(); 
+    p4_bounds.head(3) = wheel_4 - Eigen::Vector3d(delta, delta, 0.0); 
+    p4_bounds.tail(3) = wheel_4 + Eigen::Vector3d(0.0, 0.0, delta);
+    
+    std::vector <Eigen::Vector6d> p_bounds{p1_bounds, p2_bounds, p3_bounds, p4_bounds};
+   
+    double m = model->getMass();
+    double Wp = 10;
+    double Wcom = 100;
+   
+    /*SOLVE*/
+    solve_initial_opt(p_bounds, F_max, C, R, P, p_ref, Wp, com_ref, Wcom, m, mu, ext_w, x_opt);
+    
     p_opt = x_opt.head(12);
     F_opt = x_opt.segment<12> (12);
     n_opt = x_opt.segment<12> (24);
@@ -449,183 +473,102 @@ int main(int argc, char **argv)
         logger->add("n_initial", n_opt);
     }
 
-    
-/* Simultaneous foot lift  */
-
-    Eigen::Affine3d w_T_com;
-    w_T_com.translation() = com_opt;
-
-    for (int i : {0, 1, 2, 3}) 
-    {
-
-        Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
-
-        Eigen::Vector3d ni = - n_opt.segment<3> (3 * i);
-
-        Eigen::Matrix3d R;
-        R.setZero();
-
-        R.coeffRef(0, 0) =  ni.y() / ((ni.head(2)).norm());
-        R.coeffRef(0, 1) = -ni.x() / ((ni.head(2)).norm());
-
-        R.coeffRef(1, 0) = (ni.x() * ni.z()) / ((ni.head(2)).norm());
-        R.coeffRef(1, 1) = (ni.y() * ni.z()) / ((ni.head(2)).norm());
-        R.coeffRef(1, 2) = - (ni.head(2)).norm();
-
-        R.coeffRef(2, 0) = ni.x();
-        R.coeffRef(2, 1) = ni.y();
-        R.coeffRef(2, 2) = ni.z();
-
-
-        Eigen::Affine3d w_T_f;
-        w_T_f.translation() = pi;
-
-        Eigen::Affine3d a_T_f;
-        a_T_f.translation() = ni;
-        a_T_f.linear() =  R.transpose();
-
-
-    }
-
 /* Sequential foot lift - Balancing */
-
-    Problem nlp_legs;
-
-    nlp_legs.AddVariableSet(p1);
-    nlp_legs.AddVariableSet(p2);
-    nlp_legs.AddVariableSet(p3);
-    nlp_legs.AddVariableSet(p4);
-
-    F_max.setOnes();
-    F_max *= 800;
-
-    nlp_legs.AddVariableSet(F1);
-    F1->SetBounds(-F_max, F_max);
-    nlp_legs.AddVariableSet(F2);
-    F2->SetBounds(-F_max, F_max);
-    nlp_legs.AddVariableSet(F3);
-    F3->SetBounds(-F_max, F_max);
-    nlp_legs.AddVariableSet(F4);
-    F4->SetBounds(-F_max, F_max);
-
-    nlp_legs.AddVariableSet(n1);
-    n1->SetBounds(Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(0, 0, 1));
-    nlp_legs.AddVariableSet(n2);
-    n2->SetBounds(Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(0, 0, 1));
-    nlp_legs.AddVariableSet(n3);
-    n3->SetBounds(Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(0, 0, 1));
-    nlp_legs.AddVariableSet(n4);
-    n4->SetBounds(Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(0, 0, 1));
-
-    nlp_legs.AddVariableSet(com);
-
-    double F_thr = 200; 
-
-    fr_F1->set_F_thr(F_thr);
-    fr_F2->set_F_thr(F_thr);
-    fr_F3->set_F_thr(F_thr);
-    fr_F4->set_F_thr(F_thr);
-
-    nlp_legs.AddConstraintSet(fr_F1);
-    nlp_legs.AddConstraintSet(fr_F2);
-    nlp_legs.AddConstraintSet(fr_F3);
-    nlp_legs.AddConstraintSet(fr_F4);
     
+    double F_lift_max = 800;
+    
+    Eigen::Vector6d F1_bounds, F2_bounds, F3_bounds, F4_bounds;
+    F1_bounds.setOnes(); F1_bounds.head(3) *= -F_lift_max; F1_bounds.tail(3) *= F_lift_max;
+    F2_bounds.setOnes(); F2_bounds.head(3) *= -F_lift_max; F2_bounds.tail(3) *= F_lift_max;
+    F3_bounds.setOnes(); F3_bounds.head(3) *= -F_lift_max; F3_bounds.tail(3) *= F_lift_max;
+    F4_bounds.setOnes(); F4_bounds.head(3) *= -F_lift_max; F4_bounds.tail(3) *= F_lift_max;
+    std::vector <Eigen::Vector6d> F_bounds{F1_bounds, F2_bounds, F3_bounds, F4_bounds};
+
+    Eigen::Vector6d n1_bounds, n2_bounds, n3_bounds, n4_bounds;
+    n1_bounds.setZero(); n1_bounds[2] = 1.0; n1_bounds[5] = 1.0;
+    n2_bounds.setZero(); n2_bounds[2] = 1.0; n2_bounds[5] = 1.0;
+    n3_bounds.setZero(); n3_bounds[2] = 1.0; n3_bounds[5] = 1.0;
+    n4_bounds.setZero(); n4_bounds[2] = 1.0; n4_bounds[5] = 1.0;
+    std::vector <Eigen::Vector6d> n_bounds{n1_bounds, n2_bounds, n3_bounds, n4_bounds};
+
+    Eigen::VectorXd F_thr;
+    double thr = 200;
+    F_thr.setOnes(4); F_thr *= thr; 
+
     std::vector< Eigen::VectorXd > x_opt_legs(5, Eigen::VectorXd::Zero(39));
     std::vector< Eigen::VectorXd > p_opt_legs(5, Eigen::VectorXd::Zero(12));
     std::vector< Eigen::VectorXd > F_opt_legs(5, Eigen::VectorXd::Zero(12));
     std::vector< Eigen::VectorXd > n_opt_legs(5, Eigen::VectorXd::Zero(12));
     std::vector< Eigen::VectorXd > com_opt_legs(5, Eigen::VectorXd::Zero(3));
 
-    std::vector < std::shared_ptr<ExVariables> > F {F1, F2, F3, F4};
-    std::vector < std::shared_ptr<FrictionConstraint> > fr_F {fr_F1, fr_F2, fr_F3, fr_F4};
-    std::vector < std::shared_ptr<ExVariables> > p {p1, p2, p3, p4};
-    std::vector < std::shared_ptr<ExVariables> > n {n1, n2, n3, n4};
-
-    static_constr->SetExternalWrench( Eigen::VectorXd::Zero(6));
-    nlp_legs.AddConstraintSet(static_constr);
-
-
-    nlp_legs.AddCostSet(cost);
-    cost->SetPosRef(p_ref, 0);
-    cost->SetCOMRef(com_ref, 1);
-    cost->SetForceRef(0);
+    p_bounds[0].head(3) = p_ref.head(3);        p_bounds[0].tail(3) = p_bounds[0].head(3);
+    p_bounds[1].head(3) = p_ref.segment<3>(3);  p_bounds[1].tail(3) = p_bounds[1].head(3);
+    p_bounds[2].head(3) = p_ref.segment<3>(6);  p_bounds[2].tail(3) = p_bounds[2].head(3);
+    p_bounds[3].head(3) = p_ref.tail(3);        p_bounds[3].tail(3) = p_bounds[3].head(3);
     
-    p1->SetBounds(p_ref.head(3), p_ref.head(3));
-    p2->SetBounds(p_ref.segment<3> (3), p_ref.segment<3> (3));
-    p3->SetBounds(p_ref.segment<3> (6), p_ref.segment<3> (6));
-    p4->SetBounds(p_ref.tail(3), p_ref.tail(3));
-
-    com->SetBounds(com_ref - 0.2 * Eigen::Vector3d::Ones(), com_ref + 0.2 * Eigen::Vector3d::Ones());
+    Eigen::Vector6d com_bounds;
+    double delta_com = 0.2;
+    com_bounds.head(3) = com_ref - delta_com * Eigen::Vector3d::Ones();
+    com_bounds.tail(3) = com_ref + delta_com * Eigen::Vector3d::Ones();
+    
+    
+    /* Force estimation */
+    std::map<std::string, ros::Subscriber> sub_force_map;
+    std::map<std::string, Eigen::Vector6d> f_est_map;
+    
+    for(auto l : feet)
+    {
+        auto sub_force = ros::NodeHandle("cartesian").subscribe<geometry_msgs::WrenchStamped>("force_estimation/" + l, 1, boost::bind(on_force_recv, _1, l));	
+	sub_force_map[l] = sub_force;
+	f_est_map[l] = Eigen::Vector6d::Zero();
+	
+	ROS_INFO("Subscribed to topic '%s'", sub_force.getTopic().c_str());
+	
+    }
+    
+    g_fmap_ptr = &f_est_map;
+    
+//     while(ros::ok())
+//     {
+//         ros::spinOnce();
+// 	usleep(10000);
+//     }
     
     set_low_stiffness(robot);
    
     for (int i : {0,1,2,3})  
     {
+ 
+	F_bounds[i] = Eigen::Vector6d::Zero();
+	F_thr[i] = 0.0;
+	p_bounds[i].head(3) = -1e3*Eigen::Vector3d::Ones(); p_bounds[i].tail(3) =  1e3*Eigen::Vector3d::Ones();
 
-        // No force on the lifting leg 
-        F_max *= 0;
-        F[i]->SetBounds(-F_max, F_max);
-
-        fr_F[i]->set_F_thr(0);
+        solve_transition_opt(p_bounds, n_bounds, com_bounds, F_bounds, F_thr, p_ref, com_ref, m, mu, Eigen::Vector6d::Zero(), x_opt_legs[i]);
         
-        // No position bound on the lifting leg
-        p[i]->SetBounds(-1e3*Eigen::Vector3d::Ones(), 1e3*Eigen::Vector3d::Ones());
-        
-        ipopt.Solve(nlp_legs);
-        x_opt_legs[i] = nlp_legs.GetOptVariables()->GetValues();
-
         p_opt_legs[i] = x_opt_legs[i].head(12);
         F_opt_legs[i] = x_opt_legs[i].segment<12> (12);
         n_opt_legs[i] = x_opt_legs[i].segment<12> (24);
         com_opt_legs[i] =  x_opt_legs[i].tail(3);
-        
-        
-        // Check CoM inside support polygon (feet on the ground)
-        bool com_check = true;
-        
-        if (i==0)
-            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(3),p_opt_legs[i].segment<3>(6),p_opt_legs[i].segment<3>(9));
-        if (i==1)
-            com_check = PointInTriangle(com_opt_legs[i],p_opt_legs[i].segment<3>(0),p_opt_legs[i].segment<3>(6),p_opt_legs[i].segment<3>(9));
-      
-        std::cout<<"CoM inside support polygon: "<< com_check <<std::endl;
-            
+         
+	F_bounds[i].setOnes();
+	F_bounds[i].head(3) *= -F_lift_max; F_bounds[i].tail(3) *= F_lift_max;
+        F_thr[i] = thr;
 
-        F_max.setOnes();
-        F_max *= 800;
-        F[i]->SetBounds(-F_max, F_max);
+        /* Put wheels on the ground */ 
+        Eigen::Vector3d pi = p_opt.segment<3> (3 * i); 
+	
+        if( (i==0) || (i==1) )
+	  pi.z() = ground_z;
+	
+	p_bounds[i].head(3) = pi; p_bounds[i].tail(3) = pi;
 
-        fr_F[i]->set_F_thr(F_thr);
-
-        // Put wheel on the ground, if super-ellipsoid is close to the ground 
-        Eigen::Vector3d pi = p_opt.segment<3> (3 * i);
-        
-        if ((pi.z() - ground_z) <= 0.015)
-        {
-            pi.z() = ground_z;
-        }
-
-        p[i]->SetBounds(pi, pi);
 
         Eigen::Vector3d ni = - n_opt.segment<3> (3 * i);
+	n_bounds[i].head(3) = -ni; n_bounds[i].tail(3) = -ni; 
+	
+	Eigen::Matrix3d R; R.setZero();
+	compute_RotM(ni, R);
 
-        n[i]->SetBounds(n_opt.segment<3> (3 * i), n_opt.segment<3> (3 * i));
-
-        Eigen::Matrix3d R;
-        R.setZero();
-
-        R.coeffRef(0, 0) =  ni.y() / ((ni.head(2)).norm());
-        R.coeffRef(0, 1) = -ni.x() / ((ni.head(2)).norm());
-
-        R.coeffRef(1, 0) = (ni.x() * ni.z()) / ((ni.head(2)).norm());
-        R.coeffRef(1, 1) = (ni.y() * ni.z()) / ((ni.head(2)).norm());
-        R.coeffRef(1, 2) = - (ni.head(2)).norm();
-
-        R.coeffRef(2, 0) = ni.x();
-        R.coeffRef(2, 1) = ni.y();
-        R.coeffRef(2, 2) = ni.z();
-        
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
         
@@ -657,14 +600,45 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-	    ci.setTargetPose(feet[i], w_T_f1, 6.0);
+
+	    ci.setTargetPose(feet[i], w_T_f1, 4.0);
 	    Eigen::Affine3d a_T_f;
 	    a_T_f.translation() = ni;
 	    a_T_f.linear() =  R.transpose();
 	    ci.setTargetPose(ankle[i], a_T_f, 4.0);
 	    if(i==3)
 	      fpub.send_normal(n_opt);
-	    ci.waitReachCompleted(ankle[i]);
+            ci.waitReachCompleted(ankle[i]);
+	    
+	    ros::Rate rate(100.0);
+	    
+	    double contact_thr = 100.0;	    
+	    bool contact_detection = false;
+	    
+	    ci.setControlMode(feet[i], Cartesian::ControlType::Velocity);
+	    while(!contact_detection)
+	    {
+	      
+	      ros::spinOnce();
+	      
+	      Eigen::Vector3d f_est = f_est_map[feet[i]].head(3);
+	      
+	      std::cout<<"f_est.norm(): " << f_est.norm() << std::endl;
+	      
+	      if( f_est.norm() >= contact_thr )
+		contact_detection = true;
+	      
+	      Eigen::Vector6d vel; 
+	      vel.setZero();
+	      vel.head(3) = ni; vel *= 1e-2;
+	      
+	      ci.setVelocityReference(feet[i],vel);
+	    }
+	    ci.setControlMode(feet[i], Cartesian::ControlType::Position);
+	    
+// 	    ci.getPoseFromTf(feet[i], "ci/world_odom", pose);
+// 	    p_bounds[i].head(3) = pose.translation(); p_bounds[i].tail(3) =  pose.translation();
+	    
 	}
 	
 
@@ -681,58 +655,58 @@ int main(int argc, char **argv)
 
     }
     
-    fpub.send_force(Eigen::VectorXd::Zero(12)); 
+//     fpub.send_force(Eigen::VectorXd::Zero(12)); 
+    fpub.send_force(F_opt); 
   
-      
     if (log)
      logger->flush();
      
     return 0;
        
-    pose_arm1_8.translation().x() += 0.15;
-    ci.setBaseLink("arm1_8", "world");
-    ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
-    
-    pose_arm2_8.translation().x() += 0.15;
-    ci.setBaseLink("arm2_8", "world");
-    ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
-    ci.waitReachCompleted("arm2_8");
-
-/* CoM-Force opt for pushing */    
-    static_constr->SetExternalWrench(ext_w);
-    
-    ipopt.Solve(nlp_legs);
-    x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
-    
-    p_opt_legs[4] = x_opt_legs[4].head(12);
-    F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
-    n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
-    com_opt_legs[4] =  x_opt_legs[4].tail(3);
-    
-    w_T_com.translation() = com_opt_legs[4];
-    ci.setTargetPose("com", w_T_com, 5.0);
-    ci.waitReachCompleted("com");
-    
-    if (log) 
-    {
-        logger->add("x_sol_final", x_opt_legs[4]);
-        logger->add("com_final", com_opt_legs[4]);
-        logger->add("p_final", p_opt_legs[4]);
-        logger->add("F_final", F_opt_legs[4]);
-        logger->add("n_final", n_opt_legs[4]);
-    }
-
-/* Pushing */      
-    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
-    ci.setBaseLink("arm1_8", "pelvis");
-   
-    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
-    ci.setBaseLink("arm2_8", "pelvis");
-        
-   
-    fpub.send_force( F_opt_legs[4] );
-    fpub.send_normal( n_opt_legs[4] );
-    fpub.send_wrench_manip(ext_w); 
+//     pose_arm1_8.translation().x() += 0.15;
+//     ci.setBaseLink("arm1_8", "world");
+//     ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
+//     
+//     pose_arm2_8.translation().x() += 0.15;
+//     ci.setBaseLink("arm2_8", "world");
+//     ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
+//     ci.waitReachCompleted("arm2_8");
+// 
+// /* CoM-Force opt for pushing */    
+//     static_constr->SetExternalWrench(ext_w);
+//     
+//     ipopt.Solve(nlp_legs);
+//     x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
+//     
+//     p_opt_legs[4] = x_opt_legs[4].head(12);
+//     F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
+//     n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
+//     com_opt_legs[4] =  x_opt_legs[4].tail(3);
+//     
+//     w_T_com.translation() = com_opt_legs[4];
+//     ci.setTargetPose("com", w_T_com, 5.0);
+//     ci.waitReachCompleted("com");
+//     
+//     if (log) 
+//     {
+//         logger->add("x_sol_final", x_opt_legs[4]);
+//         logger->add("com_final", com_opt_legs[4]);
+//         logger->add("p_final", p_opt_legs[4]);
+//         logger->add("F_final", F_opt_legs[4]);
+//         logger->add("n_final", n_opt_legs[4]);
+//     }
+// 
+// /* Pushing */      
+//     ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
+//     ci.setBaseLink("arm1_8", "pelvis");
+//    
+//     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
+//     ci.setBaseLink("arm2_8", "pelvis");
+//         
+//    
+//     fpub.send_force( F_opt_legs[4] );
+//     fpub.send_normal( n_opt_legs[4] );
+//     fpub.send_wrench_manip(ext_w); 
     
 
     while (ros::ok()) 

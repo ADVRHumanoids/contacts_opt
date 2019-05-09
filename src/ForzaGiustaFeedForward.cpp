@@ -1,12 +1,9 @@
 #include <ros/ros.h>
 #include <geometry_msgs/WrenchStamped.h>
 #include <eigen_conversions/eigen_msg.h>
-
 #include <XBotInterface/RobotInterface.h>
 #include <RobotInterfaceROS/ConfigFromParam.h>
-
 #include <ifopt_problem/ForzaGiustaOpt.h>
-
 #include <sensor_msgs/JointState.h>
 
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
