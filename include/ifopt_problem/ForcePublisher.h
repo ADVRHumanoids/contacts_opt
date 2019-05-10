@@ -12,7 +12,7 @@ namespace force_publisher {
       
       void send_force(const Eigen::VectorXd& f_opt);
       void send_normal(const Eigen::VectorXd& n_opt);
-      void send_wrench_manip(const Eigen::VectorXd& tau_opt);
+      void send_wrench_manip(const Eigen::VectorXd& tau_manip);
       
   private:
       
@@ -57,6 +57,24 @@ namespace force_publisher {
       
   }
 
+  void ForcePublisher::send_wrench_manip(const Eigen::VectorXd &tau_manip)
+  {
+      	      
+	  geometry_msgs::WrenchStamped msg;
+	  msg.header.frame_id = "world";
+	  msg.header.stamp = ros::Time::now();        
+	  msg.wrench.force.x = tau_manip[0];
+	  msg.wrench.force.y = tau_manip[1];
+	  msg.wrench.force.z = tau_manip[2];
+	  msg.wrench.torque.x = tau_manip[3];
+	  msg.wrench.torque.y = tau_manip[4];
+	  msg.wrench.torque.z = tau_manip[5];
+	
+	_pub_wrench_manip.publish(msg);
+	  
+      
+  }
+  
   void ForcePublisher::send_normal(const Eigen::VectorXd &n_opt)
   {
       

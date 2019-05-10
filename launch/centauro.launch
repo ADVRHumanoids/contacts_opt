@@ -52,6 +52,8 @@
           name="force_estimator"
           output="screen">
           
+	<remap from="~torque_offset" to="cartesian/torque_offset"/>
+          
         <param name="is_model_floating_base" value="true"/>
         <param name="model_type" value="RBDL"/>
         

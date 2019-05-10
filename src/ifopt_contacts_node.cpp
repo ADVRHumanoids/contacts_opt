@@ -289,8 +289,6 @@ void compute_RotM(const Eigen::Vector3d &ni, Eigen::Matrix3d &R)
 
 void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
 {
-//     std::cout << __PRETTY_FUNCTION__ << std::endl;
-//     std::cout << *msg << std::endl;
     tf::wrenchMsgToEigen(msg->wrench, g_fmap_ptr->at(l));
 }
 
@@ -345,7 +343,7 @@ int main(int argc, char **argv)
 
     Eigen::Affine3d pose;
     
-    /* Lower the homing CoM */
+    /* Lowering the Homing CoM */
     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
     pose.translation().z() -= 0.05;
     Eigen::Vector3d com_ref = pose.translation();
@@ -377,10 +375,6 @@ int main(int argc, char **argv)
     Eigen::Vector3d wheel_4 = pose.translation();
     wheel_4.x() =  pelvis.x() - wheel_offset_x;
     wheel_4.y() =  pelvis.y() - wheel_offset_y;
-    
-    Eigen::Affine3d pose_arm1_8, pose_arm2_8;
-    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose_arm1_8);       
-    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose_arm2_8);
 
     double ground_z = wheel_1.z();  
 
@@ -405,7 +399,7 @@ int main(int argc, char **argv)
     }
     
 
-    /* Initial desired wheel position on the ground*/
+    /* INITIAL OPT - Manipulation*/
     Eigen::VectorXd p_ref;
     p_ref.setZero(12);
 
@@ -422,7 +416,7 @@ int main(int argc, char **argv)
 
     Eigen::VectorXd ext_w;
     ext_w.setZero(6);
-    ext_w << 1200, 0, 0, 0, 0, 0.0;
+    ext_w[0] = 1200.0;
 
     Eigen::Vector3d F_max;
     F_max.setOnes();
@@ -473,7 +467,7 @@ int main(int argc, char **argv)
         logger->add("n_initial", n_opt);
     }
 
-/* Sequential foot lift - Balancing */
+    /* TRANSITIONS OPT - Balancing ONLY*/
     
     double F_lift_max = 800;
     
@@ -507,12 +501,13 @@ int main(int argc, char **argv)
     p_bounds[3].head(3) = p_ref.tail(3);        p_bounds[3].tail(3) = p_bounds[3].head(3);
     
     Eigen::Vector6d com_bounds;
-    double delta_com = 0.2;
-    com_bounds.head(3) = com_ref - delta_com * Eigen::Vector3d::Ones();
-    com_bounds.tail(3) = com_ref + delta_com * Eigen::Vector3d::Ones();
+    Eigen::Vector3d delta_com;
+    delta_com << 0.2, 0.2, 0.0;
+    com_bounds.head(3) = com_ref - delta_com;
+    com_bounds.tail(3) = com_ref + delta_com;
     
     
-    /* Force estimation */
+    /* FORCE ESTIMATION */
     std::map<std::string, ros::Subscriber> sub_force_map;
     std::map<std::string, Eigen::Vector6d> f_est_map;
     
@@ -530,12 +525,6 @@ int main(int argc, char **argv)
     
     g_fmap_ptr = &f_est_map;
     
-//     while(ros::ok())
-//     {
-//         ros::spinOnce();
-// 	usleep(10000);
-//     }
-    
     set_low_stiffness(robot);
    
     for (int i : {0,1,2,3})  
@@ -545,7 +534,8 @@ int main(int argc, char **argv)
 	F_thr[i] = 0.0;
 	p_bounds[i].head(3) = -1e3*Eigen::Vector3d::Ones(); p_bounds[i].tail(3) =  1e3*Eigen::Vector3d::Ones();
 
-        solve_transition_opt(p_bounds, n_bounds, com_bounds, F_bounds, F_thr, p_ref, com_ref, m, mu, Eigen::Vector6d::Zero(), x_opt_legs[i]);
+        /*SOLVE*/
+	solve_transition_opt(p_bounds, n_bounds, com_bounds, F_bounds, F_thr, p_ref, com_ref, m, mu, Eigen::Vector6d::Zero(), x_opt_legs[i]);
         
         p_opt_legs[i] = x_opt_legs[i].head(12);
         F_opt_legs[i] = x_opt_legs[i].segment<12> (12);
@@ -637,10 +627,7 @@ int main(int argc, char **argv)
 	      ci.setVelocityReference(feet[i],vel);
 	    }
 	    ci.setControlMode(feet[i], Cartesian::ControlType::Position);
-	    
-// 	    ci.getPoseFromTf(feet[i], "ci/world_odom", pose);
-// 	    p_bounds[i].head(3) = pose.translation(); p_bounds[i].tail(3) =  pose.translation();
-	    
+	    	    
 	}
 	
 
@@ -658,15 +645,12 @@ int main(int argc, char **argv)
     }
     
     fpub.send_force(F_opt); 
-  
-    if (log)
-     logger->flush();
-     
-    return 0;
     
-    
-//     ros::Rate rate(100.0);
-    
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation() = com_ref;
+    ci.setTargetPose("com", pose, 4.0);
+    ci.waitReachCompleted("com");
+   
     double contact_thr = 50.0;	    
     bool right_arm_contact = false;
     bool left_arm_contact = false;   
@@ -699,11 +683,16 @@ int main(int argc, char **argv)
       ci.setVelocityReference("arm2_8",vel);
     }
     ci.setControlMode("arm1_8", Cartesian::ControlType::Position);
-    ci.setControlMode("arm2_8", Cartesian::ControlType::Position);
-         
-//     fpub.send_force(F_opt);
-//     fpub.send_normal(n_opt);
-//     fpub.send_wrench_manip(ext_w); 
+    ci.setControlMode("arm2_8", Cartesian::ControlType::Position);      
+    
+    ci.getPoseFromTf("arm1_8", "ci/world_odom", pose);
+    Eigen::Vector3d left_arm = pose.translation();
+    ci.getPoseFromTf("arm2_8", "ci/world_odom", pose);
+    Eigen::Vector3d right_arm = pose.translation();
+    Eigen::Vector3d f_manip = ext_w.head(3)/2.0;
+    ext_w.tail(3) = (left_arm - com_ref).cross(f_manip) + (right_arm - com_ref).cross(f_manip);
+    
+    fpub.send_wrench_manip(ext_w); 
     
 
     while (ros::ok()) 
@@ -711,6 +700,9 @@ int main(int argc, char **argv)
         ros::spinOnce();
         loop_rate.sleep();
     }
+    
+    if (log)
+      logger->flush();
     
     return 0;
 }
