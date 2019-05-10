@@ -495,11 +495,11 @@ int main(int argc, char **argv)
     double thr = 200;
     F_thr.setOnes(4); F_thr *= thr; 
 
-    std::vector< Eigen::VectorXd > x_opt_legs(5, Eigen::VectorXd::Zero(39));
-    std::vector< Eigen::VectorXd > p_opt_legs(5, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > F_opt_legs(5, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > n_opt_legs(5, Eigen::VectorXd::Zero(12));
-    std::vector< Eigen::VectorXd > com_opt_legs(5, Eigen::VectorXd::Zero(3));
+    std::vector< Eigen::VectorXd > x_opt_legs(4, Eigen::VectorXd::Zero(39));
+    std::vector< Eigen::VectorXd > p_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > F_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > n_opt_legs(4, Eigen::VectorXd::Zero(12));
+    std::vector< Eigen::VectorXd > com_opt_legs(4, Eigen::VectorXd::Zero(3));
 
     p_bounds[0].head(3) = p_ref.head(3);        p_bounds[0].tail(3) = p_bounds[0].head(3);
     p_bounds[1].head(3) = p_ref.segment<3>(3);  p_bounds[1].tail(3) = p_bounds[1].head(3);
@@ -516,7 +516,9 @@ int main(int argc, char **argv)
     std::map<std::string, ros::Subscriber> sub_force_map;
     std::map<std::string, Eigen::Vector6d> f_est_map;
     
-    for(auto l : feet)
+    std::vector<std::string> force_links  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4", "arm1_8", "arm2_8"};
+    
+    for(auto l : force_links)
     {
         auto sub_force = ros::NodeHandle("cartesian").subscribe<geometry_msgs::WrenchStamped>("force_estimation/" + l, 1, boost::bind(on_force_recv, _1, l));	
 	sub_force_map[l] = sub_force;
@@ -655,57 +657,52 @@ int main(int argc, char **argv)
 
     }
     
-//     fpub.send_force(Eigen::VectorXd::Zero(12)); 
     fpub.send_force(F_opt); 
   
     if (log)
      logger->flush();
      
     return 0;
-       
-//     pose_arm1_8.translation().x() += 0.15;
-//     ci.setBaseLink("arm1_8", "world");
-//     ci.setTargetPose("arm1_8", pose_arm1_8, 2.0);
-//     
-//     pose_arm2_8.translation().x() += 0.15;
-//     ci.setBaseLink("arm2_8", "world");
-//     ci.setTargetPose("arm2_8", pose_arm2_8, 2.0);
-//     ci.waitReachCompleted("arm2_8");
-// 
-// /* CoM-Force opt for pushing */    
-//     static_constr->SetExternalWrench(ext_w);
-//     
-//     ipopt.Solve(nlp_legs);
-//     x_opt_legs[4] = nlp_legs.GetOptVariables()->GetValues();
-//     
-//     p_opt_legs[4] = x_opt_legs[4].head(12);
-//     F_opt_legs[4] = x_opt_legs[4].segment<12> (12);
-//     n_opt_legs[4] = x_opt_legs[4].segment<12> (24);
-//     com_opt_legs[4] =  x_opt_legs[4].tail(3);
-//     
-//     w_T_com.translation() = com_opt_legs[4];
-//     ci.setTargetPose("com", w_T_com, 5.0);
-//     ci.waitReachCompleted("com");
-//     
-//     if (log) 
-//     {
-//         logger->add("x_sol_final", x_opt_legs[4]);
-//         logger->add("com_final", com_opt_legs[4]);
-//         logger->add("p_final", p_opt_legs[4]);
-//         logger->add("F_final", F_opt_legs[4]);
-//         logger->add("n_final", n_opt_legs[4]);
-//     }
-// 
-// /* Pushing */      
-//     ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
-//     ci.setBaseLink("arm1_8", "pelvis");
-//    
-//     ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
-//     ci.setBaseLink("arm2_8", "pelvis");
-//         
-//    
-//     fpub.send_force( F_opt_legs[4] );
-//     fpub.send_normal( n_opt_legs[4] );
+    
+    
+//     ros::Rate rate(100.0);
+    
+    double contact_thr = 50.0;	    
+    bool right_arm_contact = false;
+    bool left_arm_contact = false;   
+
+    ci.setControlMode("arm1_8", Cartesian::ControlType::Velocity);
+    ci.setControlMode("arm2_8", Cartesian::ControlType::Velocity);
+    
+    while( !(right_arm_contact && left_arm_contact) )
+    {
+      
+      ros::spinOnce();
+      
+      Eigen::Vector3d left_arm_force  = f_est_map["arm1_8"].head(3);
+      Eigen::Vector3d right_arm_force = f_est_map["arm2_8"].head(3);
+      
+      std::cout<<"left_arm_force: " << left_arm_force << std::endl;
+      std::cout<<"right_arm_force: " << left_arm_force << std::endl;
+      
+      if( left_arm_force.norm() >= contact_thr )
+	left_arm_contact = true;
+      
+      if( right_arm_force.norm() >= contact_thr )
+	right_arm_contact = true;
+      
+      Eigen::Vector6d vel; 
+      vel.setZero();
+      vel.head(3) << 1.0, 0.0, 0.0; vel *= 1e-2;
+      
+      ci.setVelocityReference("arm1_8",vel);
+      ci.setVelocityReference("arm2_8",vel);
+    }
+    ci.setControlMode("arm1_8", Cartesian::ControlType::Position);
+    ci.setControlMode("arm2_8", Cartesian::ControlType::Position);
+         
+//     fpub.send_force(F_opt);
+//     fpub.send_normal(n_opt);
 //     fpub.send_wrench_manip(ext_w); 
     
 
