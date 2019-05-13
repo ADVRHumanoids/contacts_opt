@@ -23,6 +23,8 @@
         <arg name="prefix" value="$(arg prefix)"/>
     </include>    
     
+    <rosparam command="load" param="cartesian/torque_offset" file="$(find contacts_opt)/config/tau_offset.yaml"/>
+    
                 
     <node pkg="contacts_opt"
           type="forza_giusta_node"
@@ -30,6 +32,8 @@
           output="screen">
           
           <arg name="rate" value="$(arg rate)"/>
+          
+          <remap from="~torque_offset" to="cartesian/torque_offset"/>
           
           <param name="mu" value="1.0"/>
           
@@ -51,6 +55,7 @@
           type="force_estimation_node" 
           name="force_estimator"
           output="screen">
+          
           
 	<remap from="~torque_offset" to="cartesian/torque_offset"/>
           

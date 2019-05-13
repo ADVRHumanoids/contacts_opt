@@ -55,19 +55,12 @@ void set_legs_low_stiffness(XBot::RobotInterface::Ptr robot)
    
 }
 
-void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd& K_0)
+void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
           
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    // dont send any impedance to the wheels
-    std::map<std::string, XBot::ControlMode> ctrl_map;
-    ctrl_map["j_arm1_8"] = XBot::ControlMode::Idle();
-    ctrl_map["j_arm2_8"] = XBot::ControlMode::Idle();
-  
-    robot->setControlMode(ctrl_map);
-    
-    Eigen::VectorXd  K_end(7);
+    Eigen::VectorXd  K_0, K_end(7);
     robot->arm(0).getStiffness(K_0);
     K_end = K_0;
     K_end.head(4).setZero();
@@ -89,22 +82,15 @@ void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd& K_
    
 }
 
-void set_arms_high_stiffness(XBot::RobotInterface::Ptr robot, const Eigen::VectorXd& K_0)
+void set_arms_high_stiffness(XBot::RobotInterface::Ptr robot)
 {
-    
-    return;
-       
-    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
-    
-    // dont send any impedance to the wheels
-    std::map<std::string, XBot::ControlMode> ctrl_map;
-    ctrl_map["j_arm1_8"] = XBot::ControlMode::Idle();
-    ctrl_map["j_arm2_8"] = XBot::ControlMode::Idle();
-  
-    robot->setControlMode(ctrl_map);
-    
-    Eigen::VectorXd  K;
-    robot->arm(0).getStiffness(K);
+     
+//     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping()); 
+     
+    Eigen::VectorXd  K_0, K_end(7);
+    robot->arm(0).getStiffness(K_0);
+    K_end = K_0;
+    K_end.head(4) << 50.0, 50.0, 50.0, 50.0;
  
     const int N_ITER = 200;
     for(int k = 0; k < N_ITER; k++)
@@ -112,7 +98,7 @@ void set_arms_high_stiffness(XBot::RobotInterface::Ptr robot, const Eigen::Vecto
         for(int i = 0; i < 2; i++)
         {
             Eigen::VectorXd arm_k(robot->arm(i).getJointNum());
-            arm_k = K + k/(N_ITER-1)*(K_0-K);
+            arm_k = K_0 + k/(N_ITER-1)*(K_end-K_0);
             robot->arm(i).setStiffness(arm_k);
         }
         
@@ -593,7 +579,7 @@ int main(int argc, char **argv)
     
     g_fmap_ptr = &f_est_map;
     
-    set_legs_low_stiffness(robot);
+//     set_legs_low_stiffness(robot);
    
     for (int i : {0,1,2,3})  
     {
@@ -714,10 +700,10 @@ int main(int argc, char **argv)
     
     fpub.send_force(F_opt); 
     
-    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-    pose.translation() = com_ref;
-    ci.setTargetPose("com", pose, 4.0);
-    ci.waitReachCompleted("com");
+//     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+//     pose.translation() = com_ref;
+//     ci.setTargetPose("com", pose, 4.0);
+//     ci.waitReachCompleted("com");
    
     double contact_thr = 50.0;	    
     bool right_arm_contact = false;
@@ -757,16 +743,15 @@ int main(int argc, char **argv)
     Eigen::Vector3d left_arm = pose.translation();
     ci.getPoseFromTf("arm2_8", "ci/world_odom", pose);
     Eigen::Vector3d right_arm = pose.translation();
+    
     Eigen::Vector3d f_manip = ext_w.head(3)/2.0;
     ext_w.tail(3) = (left_arm - com_ref).cross(f_manip) + (right_arm - com_ref).cross(f_manip);
     
-    Eigen::VectorXd K_0(7);
     
     fpub.send_wrench_manip(ext_w); 
     
-    set_arms_low_stiffness(robot, K_0);
-    
-    
+    set_arms_low_stiffness(robot);
+       
     double arm_disp = 0.05;
     bool arm_stop_push = false;
     
@@ -777,14 +762,17 @@ int main(int argc, char **argv)
     {
         ros::spinOnce();
 	
-	model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
+	robot->sense(false);
+	model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);	
 	model->getPose("arm1_8", "pelvis", pose);
+	
+	std::cout<<"left_arm displacement: " << (start_pos - pose.translation()).norm() << std::endl;
 	
 	if( (start_pos - pose.translation()).norm() >= arm_disp )
 	    arm_stop_push = true;
     }
        
-    set_arms_high_stiffness(robot, K_0);
+    set_arms_high_stiffness(robot);
     
     fpub.send_wrench_manip(Eigen::Vector6d::Zero()); 
     
