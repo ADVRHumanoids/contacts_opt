@@ -9,6 +9,7 @@
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 std::map<std::string, Eigen::Matrix3d> * g_Rmap_ptr;
 Eigen::Vector6d* wrench_manip_ptr;
+std::map<std::string, Eigen::Vector6d> * g_fmap_arm_ptr;
 
 void on_joint_pos_recv(const sensor_msgs::JointStateConstPtr& msg, XBot::JointNameMap * jmap)
 {
@@ -23,6 +24,10 @@ void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string 
     tf::wrenchMsgToEigen(msg->wrench, g_fmap_ptr->at(l));
 }
 
+void on_force_arm_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
+{
+    tf::wrenchMsgToEigen(msg->wrench, g_fmap_arm_ptr->at(l));
+}
 
 void on_wrench_recv(const geometry_msgs::WrenchStampedConstPtr& msg)
 {
@@ -90,7 +95,8 @@ int main(int argc, char ** argv)
     
     double rate = nh_priv.param("rate", 100.0);
     double mu = nh_priv.param("mu", 0.5);
-    auto links = nh_priv.param("links", std::vector<std::string>());
+    auto legs = nh_priv.param("legs", std::vector<std::string>());
+    auto arms = nh_priv.param("arms", std::vector<std::string>());
     
     /* BLACKLISTED JOINTS */    
     auto blacklist = nh_priv.param("blacklist", std::vector<std::string>());
@@ -134,9 +140,11 @@ int main(int argc, char ** argv)
     std::map<std::string, Eigen::Vector6d> f_ref_map;
     std::map<std::string, Eigen::Matrix3d> RotM_map;
     std::map<std::string, Eigen::Vector6d> f_ForzaGiusta_map;
+    std::map<std::string, ros::Subscriber> sub_force_arm_map;
+    std::map<std::string, Eigen::Vector6d> f_arm_map;
         
     
-    for(auto l : links)
+    for(auto l : legs)
     {
         auto sub_force = nh.subscribe<geometry_msgs::WrenchStamped>("force_ref/" + l,
                                                               1, 
@@ -156,6 +164,18 @@ int main(int argc, char ** argv)
         ROS_INFO("Subscribed to topic '%s'", sub_n.getTopic().c_str());
     }
     
+    for(auto l : arms)
+    {
+        auto sub_force_arm = nh.subscribe<geometry_msgs::WrenchStamped>("force_arm/" + l,
+                                                              1, 
+                                                              boost::bind(on_force_arm_recv, _1, l));
+        
+        sub_force_arm_map[l] = sub_force_arm;
+        f_arm_map[l] = Eigen::Vector6d::Zero();
+                
+        ROS_INFO("Subscribed to topic '%s'", sub_force_arm.getTopic().c_str());
+
+    }
     
      
     auto sub_wrench_manip = nh.subscribe<geometry_msgs::WrenchStamped>("wrench_manip/",
@@ -172,8 +192,9 @@ int main(int argc, char ** argv)
     g_fmap_ptr = &f_ref_map;
     g_Rmap_ptr = &RotM_map;
     wrench_manip_ptr = &wrench_manip;
+    g_fmap_arm_ptr = &f_arm_map;
     
-    auto force_opt = boost::make_shared<forza_giusta::ForceOptimization>(model, links, mu);
+    auto force_opt = boost::make_shared<forza_giusta::ForceOptimization>(model, legs, mu);
     
     
     Eigen::VectorXd tau;
@@ -249,6 +270,20 @@ int main(int argc, char ** argv)
             model->getJacobian(pair.first, J);
             
             tau -= J.transpose() * f_world;
+            
+        }
+        
+        for(const auto& pair : f_arm_map)
+        {
+      
+            Eigen::Vector6d f_arm = pair.second;;
+    
+	    std::cout << "F_" + pair.first + ": " << f_arm.head(3) << std::endl;
+ 
+            Eigen::MatrixXd J;           
+            model->getJacobian(pair.first, J);
+            
+            tau -= J.transpose() * f_arm;
             
         }
         

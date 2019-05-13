@@ -21,7 +21,7 @@ std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 void set_legs_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
     
-    return;
+//     return;
        
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
@@ -367,9 +367,10 @@ int main(int argc, char **argv)
     ros::NodeHandle nh_priv("~");
     
     std::vector<std::string> feet  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4"};
+    std::vector<std::string> arms  = {"arm1_8", "arm2_8"};
     std::vector<std::string> ankle = {"ankle2_1", "ankle2_2", "ankle2_3", "ankle2_4"};
     
-    force_publisher::ForcePublisher fpub(feet);
+    force_publisher::ForcePublisher fpub(feet, arms);
 
     XBot::Cartesian::RosImpl ci;  
 
@@ -748,7 +749,11 @@ int main(int argc, char **argv)
     ext_w.tail(3) = (left_arm - com_ref).cross(f_manip) + (right_arm - com_ref).cross(f_manip);
     
     
-    fpub.send_wrench_manip(ext_w); 
+    fpub.send_wrench_manip(ext_w);
+    Eigen::Vector6d F_arms;
+    F_arms.head(3) = f_manip; 
+    F_arms.tail(3) = f_manip; 
+    fpub.send_force_arm(F_arms);
     
     set_arms_low_stiffness(robot);
        
@@ -773,6 +778,7 @@ int main(int argc, char **argv)
     }
        
     set_arms_high_stiffness(robot);
+    fpub.send_force_arm(Eigen::Vector6d::Zero());
     
     fpub.send_wrench_manip(Eigen::Vector6d::Zero()); 
     
