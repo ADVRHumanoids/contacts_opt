@@ -35,7 +35,7 @@
           
           <remap from="~torque_offset" to="cartesian/torque_offset"/>
           
-          <param name="mu" value="1.0"/>
+          <param name="mu" value="0.5"/>
           
           <param name="log" type="bool" value="true"/>
                    

@@ -278,11 +278,11 @@ int main(int argc, char ** argv)
       
             Eigen::Vector6d f_arm = pair.second;;
     
-	    std::cout << "F_" + pair.first + ": " << f_arm.head(3) << std::endl;
+// 	    std::cout << "F_" + pair.first + ": " << f_arm.head(3) << std::endl;
  
             Eigen::MatrixXd J;           
             model->getJacobian(pair.first, J);
-            
+          
             tau -= J.transpose() * f_arm;
             
         }

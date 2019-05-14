@@ -13,7 +13,7 @@ namespace force_publisher {
       void send_force(const Eigen::VectorXd& f_opt);
       void send_normal(const Eigen::VectorXd& n_opt);
       void send_wrench_manip(const Eigen::VectorXd& tau_manip);
-      void send_force_arm(const Eigen::VectorXd& f_arms);
+      void send_force_arm(const Eigen::VectorXd& f_arm);
       
   private:
       
@@ -102,13 +102,13 @@ namespace force_publisher {
       
   }
   
-  void ForcePublisher::send_force_arm(const Eigen::VectorXd &f_arms)
+  void ForcePublisher::send_force_arm(const Eigen::VectorXd &f_arm)
   {
       
       for (int i : {0, 1}) 
       {     
 	  
-	  Eigen::Vector3d f =  f_arms.segment<3>(3*i);
+	  Eigen::Vector3d f =  f_arm.segment<3>(3*i);
 	  
 	  geometry_msgs::WrenchStamped msg;
 	  msg.header.frame_id = "world";
