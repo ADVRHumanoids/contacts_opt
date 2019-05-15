@@ -7,8 +7,10 @@
 #include <sensor_msgs/JointState.h>
 
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
+std::map<std::string, Eigen::Vector6d> * g_fmap_est_ptr;
 std::map<std::string, Eigen::Matrix3d> * g_Rmap_ptr;
 Eigen::Vector6d* wrench_manip_ptr;
+std::map<std::string, Eigen::Vector6d> * g_fmap_arms_ptr;
 
 void on_joint_pos_recv(const sensor_msgs::JointStateConstPtr& msg, XBot::JointNameMap * jmap)
 {
@@ -23,6 +25,15 @@ void on_force_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string 
     tf::wrenchMsgToEigen(msg->wrench, g_fmap_ptr->at(l));
 }
 
+void on_force_est_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
+{
+    tf::wrenchMsgToEigen(msg->wrench, g_fmap_est_ptr->at(l));
+}
+
+void on_force_arms_recv(const geometry_msgs::WrenchStampedConstPtr& msg, std::string l)
+{
+    tf::wrenchMsgToEigen(msg->wrench, g_fmap_arms_ptr->at(l));
+}
 
 void on_wrench_recv(const geometry_msgs::WrenchStampedConstPtr& msg)
 {
@@ -134,13 +145,12 @@ int main(int argc, char ** argv)
     std::map<std::string, Eigen::Vector6d> f_ref_map;
     std::map<std::string, Eigen::Matrix3d> RotM_map;
     std::map<std::string, Eigen::Vector6d> f_ForzaGiusta_map;
-        
-    
+            
     for(auto l : links)
     {
         auto sub_force = nh.subscribe<geometry_msgs::WrenchStamped>("force_ref/" + l,
-                                                              1, 
-                                                              boost::bind(on_force_recv, _1, l));
+								    1, 
+								    boost::bind(on_force_recv, _1, l));
         
         auto sub_n = nh.subscribe<geometry_msgs::WrenchStamped>("normal/" + l,
                                                                 1, 
@@ -156,7 +166,40 @@ int main(int argc, char ** argv)
         ROS_INFO("Subscribed to topic '%s'", sub_n.getTopic().c_str());
     }
     
+       
+    std::vector<std::string> arms  = {"arm1_8", "arm2_8"};
     
+    std::map<std::string, ros::Subscriber> sub_force_arms_map;
+    std::map<std::string, Eigen::Vector6d> f_ref_arms_map;
+    
+    for(auto i : arms)
+    {
+	auto sub_force_arms = nh.subscribe<geometry_msgs::WrenchStamped>("force_arms/" + i,
+									 1, 
+									 boost::bind(on_force_arms_recv, _1, i));
+	
+	sub_force_arms_map[i] = sub_force_arms;
+        f_ref_arms_map[i] = Eigen::Vector6d::Zero();	
+
+    }
+    
+    std::vector<std::string> force_links  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4", "arm1_8", "arm2_8"};
+    
+    std::map<std::string, ros::Subscriber> sub_force_est_map;
+    std::map<std::string, Eigen::Vector6d> f_est_map;
+    
+    for(auto j : force_links)
+    {
+        auto sub_force_est = ros::NodeHandle("cartesian").subscribe<geometry_msgs::WrenchStamped>("force_estimation/" + j, 1, boost::bind(on_force_est_recv, _1, j));	
+	sub_force_est_map[j] = sub_force_est;
+	f_est_map[j] = Eigen::Vector6d::Zero();
+	
+	ROS_INFO("Subscribed to topic '%s'", sub_force_est.getTopic().c_str());
+	
+    }
+    
+    g_fmap_est_ptr = &f_est_map;
+       
      
     auto sub_wrench_manip = nh.subscribe<geometry_msgs::WrenchStamped>("wrench_manip/",
                                                                        1, 
@@ -172,6 +215,7 @@ int main(int argc, char ** argv)
     g_fmap_ptr = &f_ref_map;
     g_Rmap_ptr = &RotM_map;
     wrench_manip_ptr = &wrench_manip;
+    g_fmap_arms_ptr = &f_ref_arms_map;
     
     auto force_opt = boost::make_shared<forza_giusta::ForceOptimization>(model, links, mu);
     
@@ -251,6 +295,24 @@ int main(int argc, char ** argv)
             tau -= J.transpose() * f_world;
             
         }
+        
+	
+	for (const auto& pair : f_ref_arms_map)
+	{
+            Eigen::Vector6d f_world = pair.second;
+                 
+            Eigen::MatrixXd J;           
+            model->getJacobian(pair.first, J);
+            
+            tau -= J.transpose() * f_world;
+	}
+	
+	for(const auto& pair : f_est_map)
+        { 
+	   
+	   logger->add("f_est_" + pair.first, pair.second);  
+	}
+        
         
         /* Send torque to joints */
         model->setJointEffort(tau);

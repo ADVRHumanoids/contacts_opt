@@ -23,6 +23,8 @@
         <arg name="prefix" value="$(arg prefix)"/>
     </include>    
     
+    <rosparam command="load" param="cartesian/torque_offset" file="$(find contacts_opt)/config/tau_offset.yaml"/>
+    
                 
     <node pkg="contacts_opt"
           type="forza_giusta_node"
@@ -31,7 +33,9 @@
           
           <arg name="rate" value="$(arg rate)"/>
           
-          <param name="mu" value="1.0"/>
+          <remap from="~torque_offset" to="cartesian/torque_offset"/>
+          
+          <param name="mu" value="0.3"/>
           
           <param name="log" type="bool" value="true"/>
                    
@@ -39,7 +43,7 @@
           <param name="model_type" value="RBDL"/>
           
           <param name="links" type="yaml" 
-                 value="[wheel_1, wheel_2, wheel_3, wheel_4]"/>
+                 value="[wheel_1, wheel_2, wheel_3, wheel_4]"/>          
                  
           <param name="blacklist" type="yaml" 
                  value="[j_wheel_1, j_wheel_2, j_wheel_3, j_wheel_4]"/>
@@ -51,6 +55,7 @@
           type="force_estimation_node" 
           name="force_estimator"
           output="screen">
+          
           
 	<remap from="~torque_offset" to="cartesian/torque_offset"/>
           
@@ -64,8 +69,8 @@
         <param name="wheel_2/dofs" type="yaml" value="[0, 1, 2]"/>
         <param name="wheel_3/dofs" type="yaml" value="[0, 1, 2]"/>
         <param name="wheel_4/dofs" type="yaml" value="[0, 1, 2]"/>
-        <param name="arm1_8/dofs"  type="yaml"  value="[0, 1, 2]"/>
-        <param name="arm2_8/dofs"  type="yaml"  value="[0, 1, 2]"/>
+        <param name="arm1_8/dofs"  type="yaml" value="[0, 1, 2]"/>
+        <param name="arm2_8/dofs"  type="yaml" value="[0, 1, 2]"/>
         
     </node>
 

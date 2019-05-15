@@ -66,13 +66,13 @@ LeftArm:
     type: "Cartesian"
     distal_link: "arm1_8"
     base_link: "pelvis"
-    lambda: 0.1
+    lambda: 1
 
 RightArm:
     type: "Cartesian"
     distal_link: "arm2_8"
     base_link: "pelvis"
-    lambda: 0.1
+    lambda: 1
     
 Com:
     type: "Com"
