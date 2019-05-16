@@ -5,6 +5,8 @@
 #include <RobotInterfaceROS/ConfigFromParam.h>
 #include <ifopt_problem/ForzaGiustaOpt.h>
 #include <sensor_msgs/JointState.h>
+#include <cartesian_interface/CartesianInterfaceImpl.h>
+#include <cartesian_interface/ros/RosImpl.h>
 
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 std::map<std::string, Eigen::Vector6d> * g_fmap_est_ptr;
@@ -91,7 +93,9 @@ int main(int argc, char ** argv)
     
     XBot::JointNameMap jmap;
     robot->getMotorPosition(jmap);
-    
+        
+    XBot::Cartesian::RosImpl ci;
+      
     auto j_sub = ros::NodeHandle("cartesian").subscribe<sensor_msgs::JointState>("solution", 1, 
                             std::bind(on_joint_pos_recv, std::placeholders::_1, &jmap)
                         );
@@ -241,14 +245,10 @@ int main(int argc, char ** argv)
         robot->sense(false);
         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
         model->setFloatingBaseState(imu);
-//         model->setJointPosition(jmap);
-//         model->update();
         
         Eigen::Affine3d fb_pose;
         model->getFloatingBasePose(fb_pose);
-        
-//         std::cout << fb_pose.linear() << std::endl;
-        
+                
         /* Compute gcomp */
         model->computeGravityCompensation(tau);
         tau -= tau_offset;
@@ -261,8 +261,6 @@ int main(int argc, char ** argv)
         for(const auto& pair : f_ref_map)
         {        
             Eigen::Vector6d f_world = pair.second; 
-            
-//             std::cout << "F_ifopt" + pair.first + ": " << f_world.head(3) << std::endl;   
             
             if (log) 
             {          
@@ -310,7 +308,13 @@ int main(int argc, char ** argv)
 	for(const auto& pair : f_est_map)
         { 
 	   
-	   logger->add("f_est_" + pair.first, pair.second);  
+	   Eigen::Affine3d pose;  
+	   ci.getPoseFromTf("ci/" + pair.first, "ci/world_odom", pose);
+	   
+	   Eigen::Vector3d f_est_world;
+	   f_est_world = pose.linear() * pair.second.head(3);
+	   
+	   logger->add("f_est_" + pair.first, f_est_world);  
 	}
         
         

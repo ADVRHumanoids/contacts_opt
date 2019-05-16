@@ -29,7 +29,9 @@ void set_leg_stiffness(XBot::RobotInterface::Ptr robot, const std::string chain)
     K_end = K_0;
     K_end[1] = 20.0; // hip pitch
     K_end[2] = 20.0; // knee pitch
-       
+    
+    K_end[5] = 60.0;
+        
     const int N_ITER = 100;
     for(int k = 0; k < N_ITER; k++)
     {
@@ -672,7 +674,7 @@ int main(int argc, char **argv)
 	    }
 	    ci.setControlMode(feet[i], Cartesian::ControlType::Position);
 	    
-	    fpub.send_force(Eigen::VectorXd::Zero(12));
+// 	    fpub.send_force(Eigen::VectorXd::Zero(12));
 	    
 	    set_leg_stiffness(robot, chain[i]);
 	    
