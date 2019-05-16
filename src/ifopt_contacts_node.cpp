@@ -18,6 +18,31 @@ using namespace ifopt;
 XBot::MatLogger::Ptr logger;
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 
+void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot)
+{
+   
+    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
+    
+    Eigen::VectorXd K_0, K_end(6);
+    robot->leg(0).getStiffness(K_0);
+    K_end << 500, 500, 500, 250, 50, 50;
+    
+    const int N_ITER = 400;
+    for(int k = 0; k < N_ITER; k++)
+    {
+        for(int i = 0; i < 4; i++)
+        {
+            Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
+            leg_k = K_0 + k/(N_ITER-1)*(K_end-K_0);
+            robot->leg(i).setStiffness(leg_k);
+        }
+        
+        robot->move();
+        
+        ros::Duration(0.01).sleep();
+    }
+   
+}
 
 void set_leg_stiffness(XBot::RobotInterface::Ptr robot, const std::string chain)
 {
@@ -29,10 +54,8 @@ void set_leg_stiffness(XBot::RobotInterface::Ptr robot, const std::string chain)
     K_end = K_0;
     K_end[1] = 20.0; // hip pitch
     K_end[2] = 20.0; // knee pitch
-    
-    K_end[5] = 60.0;
-        
-    const int N_ITER = 100;
+          
+    const int N_ITER = 800;
     for(int k = 0; k < N_ITER; k++)
     {
 	Eigen::VectorXd leg_k(robot->chain(chain).getJointNum());
@@ -387,6 +410,8 @@ int main(int argc, char **argv)
 
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
+    
+    set_legs_initial_stiffness(robot);
 
     Eigen::Affine3d pose;
     
@@ -608,11 +633,26 @@ int main(int argc, char **argv)
 
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
+	
+// 	if(i==3)
+// 	{
+// 	  const int N_ITER = 400;
+// 	  for(int k = 0; k < N_ITER; k++)
+// 	  {
+// 	    ros::Duration(0.01).sleep();
+// 	  }
+// 	  
+// 	  set_leg_stiffness(robot, chain[2]);
+// 	}
         
-        Eigen::Affine3d w_T_com;
+        if( i!=3 )
+	{
+	Eigen::Affine3d w_T_com;
+	w_T_com.setIdentity();
         w_T_com.translation() = com_opt_legs[i];
         ci.setTargetPose("com", w_T_com, 5.0);
         ci.waitReachCompleted("com");
+	}
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;
@@ -636,9 +676,9 @@ int main(int argc, char **argv)
 	    ci.waitReachCompleted(ankle[i]);
 	    
 	}
-	else
-	{
-
+// 	else 
+	else if(i == 2)
+	{	   
 	    ci.setTargetPose(feet[i], w_T_f1, 4.0);
 	    Eigen::Affine3d a_T_f;
 	    a_T_f.translation() = ni;
@@ -672,12 +712,7 @@ int main(int argc, char **argv)
 	      
 	      ci.setVelocityReference(feet[i],vel);
 	    }
-	    ci.setControlMode(feet[i], Cartesian::ControlType::Position);
-	    
-// 	    fpub.send_force(Eigen::VectorXd::Zero(12));
-	    
-	    set_leg_stiffness(robot, chain[i]);
-	    
+	    ci.setControlMode(feet[i], Cartesian::ControlType::Position);    
 
 	}
 	
@@ -695,13 +730,19 @@ int main(int argc, char **argv)
 
     }
     
-
-    fpub.send_force(F_opt); 
+  
+//     fpub.send_force(Eigen::VectorXd::Zero(12)); 
+//     set_leg_stiffness(robot, chain[3]);
+//     
+//     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+//     pose.translation().y() = 0.0;
+//     ci.setTargetPose("com", pose, 4.0);
+//     ci.waitReachCompleted("com");
     
-    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-    pose.translation().y() = 0.0;
-    ci.setTargetPose("com", pose, 4.0);
-    ci.waitReachCompleted("com");
+    bool manip_flag = false;
+    
+    if( manip_flag )
+    {
     
     pose.translation() << 0.78, 0.25, 0.24;
     pose.linear() = Eigen::Quaterniond(0.76, 0.23, 0.55, 0.27).toRotationMatrix(); //w x y z
@@ -713,10 +754,10 @@ int main(int argc, char **argv)
     ci.setTargetPose("arm2_8", pose, 4.0);
     ci.waitReachCompleted("arm2_8");
     
-    bool manip_flag = false;
-    
-    if( manip_flag )
-    {
+//     bool manip_flag = false;
+//     
+//     if( manip_flag )
+//     {
    
 	double contact_thr = 30.0;    
 	bool right_arm_contact = false;
