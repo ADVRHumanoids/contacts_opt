@@ -623,6 +623,7 @@ int main(int argc, char **argv)
 	fpub.send_normal(n_opt_legs[i]);
         
         Eigen::Affine3d w_T_com;
+	w_T_com.setIdentity();
         w_T_com.translation() = com_opt_legs[i];
         ci.setTargetPose("com", w_T_com, 5.0);
         ci.waitReachCompleted("com");
