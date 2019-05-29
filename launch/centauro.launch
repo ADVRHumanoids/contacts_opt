@@ -31,7 +31,7 @@
           name="forza_giusta_node_torque_ffwd" 
           output="screen">
           
-          <arg name="rate" value="$(arg rate)"/>
+          <arg name="rate" value="100.0"/>
           
           <remap from="~torque_offset" to="cartesian/torque_offset"/>
           

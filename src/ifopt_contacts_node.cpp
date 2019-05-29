@@ -55,7 +55,7 @@ void set_leg_stiffness(XBot::RobotInterface::Ptr robot, const std::string chain)
     K_end[1] = 20.0; // hip pitch
     K_end[2] = 20.0; // knee pitch
           
-    const int N_ITER = 800;
+    const int N_ITER = 10;
     for(int k = 0; k < N_ITER; k++)
     {
 	Eigen::VectorXd leg_k(robot->chain(chain).getJointNum());
@@ -99,7 +99,7 @@ void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
 void set_arms_high_stiffness(XBot::RobotInterface::Ptr robot)
 {
      
-//     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping()); 
+    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping()); 
      
     Eigen::VectorXd  K_0, K_end(7);
     robot->arm(0).getStiffness(K_0);
@@ -624,13 +624,12 @@ int main(int argc, char **argv)
 	
 	p_bounds[i].head(3) = pi; p_bounds[i].tail(3) = pi;
 
-
         Eigen::Vector3d ni = - n_opt.segment<3> (3 * i);
 	n_bounds[i].head(3) = -ni; n_bounds[i].tail(3) = -ni; 
 	
 	Eigen::Matrix3d R; R.setZero();
 	compute_RotM(ni, R);
-
+	
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
 	
@@ -701,7 +700,7 @@ int main(int argc, char **argv)
 	      
 	      Eigen::Vector3d f_est = f_est_map[feet[i]].head(3);
 	      
-	      std::cout<<"f_est.norm(): " << f_est.norm() << std::endl;
+	      std::cout<< "f_est.norm()" + feet[i] + ": " << f_est.norm() << std::endl;
 	      
 	      if( f_est.norm() >= contact_thr )
 		contact_detection = true;

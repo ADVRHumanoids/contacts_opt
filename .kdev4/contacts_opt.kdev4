@@ -8,7 +8,7 @@ ProjectRootRelative=./
 
 [CMake][CMake Build Directory 0]
 Build Directory Path=file:///home/matteo/advr-superbuild/build/external/contacts_opt
-Build Type=
+Build Type=RelWithDebInfo
 CMake Binary=file:///usr/bin/cmake
 Environment Profile=
 Extra Arguments=

@@ -13,6 +13,7 @@ std::map<std::string, Eigen::Vector6d> * g_fmap_est_ptr;
 std::map<std::string, Eigen::Matrix3d> * g_Rmap_ptr;
 Eigen::Vector6d* wrench_manip_ptr;
 std::map<std::string, Eigen::Vector6d> * g_fmap_arms_ptr;
+Eigen::Matrix3d imu_R_w0;
 
 void on_joint_pos_recv(const sensor_msgs::JointStateConstPtr& msg, XBot::JointNameMap * jmap)
 {
@@ -90,6 +91,10 @@ int main(int argc, char ** argv)
     auto robot = XBot::RobotInterface::getRobot(XBot::ConfigOptionsFromParamServer());
     auto model = XBot::ModelInterface::getModel(XBot::ConfigOptionsFromParamServer());
     auto imu = robot->getImu().begin()->second;
+    robot->sense(false);
+    Eigen::Matrix3d tmp;
+    imu->getOrientation(tmp);
+    imu_R_w0 = tmp.transpose();
     
     XBot::JointNameMap jmap;
     robot->getMotorPosition(jmap);
@@ -244,7 +249,14 @@ int main(int argc, char ** argv)
         /* Sense robot state and update model */
         robot->sense(false);
         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
-        model->setFloatingBaseState(imu);
+//         model->setFloatingBaseState(imu);
+	Eigen::Matrix3d tmp;
+	imu->getOrientation(tmp);
+	model->setFloatingBaseOrientation(imu_R_w0*tmp);
+	Eigen::Vector3d tmp_v;
+	imu->getAngularVelocity(tmp_v);
+	model->setFloatingBaseAngularVelocity(imu_R_w0*tmp_v);
+	model->update();
         
         Eigen::Affine3d fb_pose;
         model->getFloatingBasePose(fb_pose);
@@ -277,10 +289,10 @@ int main(int argc, char ** argv)
         for(const auto& pair : f_ForzaGiusta_map)
         {
       
-            Eigen::Vector6d f_world = pair.second;
+            Eigen::Vector6d f_world = pair.second;	    
          
             std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
-
+	    
             if (log) 
             {          
                 logger->add("F_" + pair.first, f_world);
@@ -289,7 +301,7 @@ int main(int argc, char ** argv)
             
             Eigen::MatrixXd J;           
             model->getJacobian(pair.first, J);
-            
+	    
             tau -= J.transpose() * f_world;
             
         }
@@ -303,18 +315,19 @@ int main(int argc, char ** argv)
             model->getJacobian(pair.first, J);
             
             tau -= J.transpose() * f_world;
-	}
+	}	
 	
 	for(const auto& pair : f_est_map)
         { 
 	   
 	   Eigen::Affine3d pose;  
-	   ci.getPoseFromTf("ci/" + pair.first, "ci/world_odom", pose);
+	   model->getPose(pair.first, pose);
 	   
 	   Eigen::Vector3d f_est_world;
 	   f_est_world = pose.linear() * pair.second.head(3);
 	   
 	   logger->add("f_est_" + pair.first, f_est_world);  
+	   
 	}
         
         
