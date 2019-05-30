@@ -249,13 +249,13 @@ int main(int argc, char ** argv)
         /* Sense robot state and update model */
         robot->sense(false);
         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
-//         model->setFloatingBaseState(imu);
-	Eigen::Matrix3d tmp;
-	imu->getOrientation(tmp);
-	model->setFloatingBaseOrientation(imu_R_w0*tmp);
-	Eigen::Vector3d tmp_v;
-	imu->getAngularVelocity(tmp_v);
-	model->setFloatingBaseAngularVelocity(imu_R_w0*tmp_v);
+        model->setFloatingBaseState(imu,imu_R_w0);
+// 	Eigen::Matrix3d tmp;
+// 	imu->getOrientation(tmp);
+// 	model->setFloatingBaseOrientation(imu_R_w0*tmp);
+// 	Eigen::Vector3d tmp_v;
+// 	imu->getAngularVelocity(tmp_v);
+// 	model->setFloatingBaseAngularVelocity(imu_R_w0*tmp_v);
 	model->update();
         
         Eigen::Affine3d fb_pose;
@@ -310,11 +310,20 @@ int main(int argc, char ** argv)
 	for (const auto& pair : f_ref_arms_map)
 	{
             Eigen::Vector6d f_world = pair.second;
+	    f_world.tail(3).setZero();
+	    
+	    std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
+	    
+	    if (log) 
+            {          
+                logger->add("F_" + pair.first, f_world);
+                                      
+            }
                  
             Eigen::MatrixXd J;           
             model->getJacobian(pair.first, J);
             
-            tau -= J.transpose() * f_world;
+            tau += J.transpose() * f_world;
 	}	
 	
 	for(const auto& pair : f_est_map)

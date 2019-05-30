@@ -77,9 +77,9 @@ void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
     Eigen::VectorXd  K_0, K_end(7);
     robot->arm(0).getStiffness(K_0);
     K_end = K_0;
-    K_end.head(4).setZero();
-    
-    const int N_ITER = 200;
+    K_end.head(4) << 50.0, 50.0, 50.0, 50.0;
+  
+    const int N_ITER = 10;
     for(int k = 0; k < N_ITER; k++)
     {
         for(int i = 0; i < 2; i++)
@@ -470,7 +470,6 @@ int main(int argc, char **argv)
         logger->add("P", P);
     }
     
-
     /* INITIAL OPT - Manipulation*/
     Eigen::VectorXd p_ref;
     p_ref.setZero(12);
@@ -596,6 +595,11 @@ int main(int argc, char **argv)
     }
     
     g_fmap_ptr = &f_est_map;
+    
+    bool balancing_flag = true;
+    
+    if ( balancing_flag )
+    {
    
     for (int i : {0,1,2,3})  
     {
@@ -632,26 +636,12 @@ int main(int argc, char **argv)
 	
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
-	
-// 	if(i==3)
-// 	{
-// 	  const int N_ITER = 400;
-// 	  for(int k = 0; k < N_ITER; k++)
-// 	  {
-// 	    ros::Duration(0.01).sleep();
-// 	  }
-// 	  
-// 	  set_leg_stiffness(robot, chain[2]);
-// 	}
-        
-        if( i!=3 )
-	{
+      
 	Eigen::Affine3d w_T_com;
 	w_T_com.setIdentity();
         w_T_com.translation() = com_opt_legs[i];
         ci.setTargetPose("com", w_T_com, 5.0);
         ci.waitReachCompleted("com");
-	}
 
         Eigen::Affine3d w_T_f1;
         w_T_f1.translation() = pi;
@@ -675,8 +665,7 @@ int main(int argc, char **argv)
 	    ci.waitReachCompleted(ankle[i]);
 	    
 	}
-// 	else 
-	else if(i == 2)
+ 	else 
 	{	   
 	    ci.setTargetPose(feet[i], w_T_f1, 4.0);
 	    Eigen::Affine3d a_T_f;
@@ -700,7 +689,7 @@ int main(int argc, char **argv)
 	      
 	      Eigen::Vector3d f_est = f_est_map[feet[i]].head(3);
 	      
-	      std::cout<< "f_est.norm()" + feet[i] + ": " << f_est.norm() << std::endl;
+	      std::cout<< "f_est norm " + feet[i] + ": " << f_est.norm() << std::endl;
 	      
 	      if( f_est.norm() >= contact_thr )
 		contact_detection = true;
@@ -729,117 +718,123 @@ int main(int argc, char **argv)
 
     }
     
+    }
   
-//     fpub.send_force(Eigen::VectorXd::Zero(12)); 
-//     set_leg_stiffness(robot, chain[3]);
-//     
-//     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-//     pose.translation().y() = 0.0;
-//     ci.setTargetPose("com", pose, 4.0);
-//     ci.waitReachCompleted("com");
+    fpub.send_force(Eigen::VectorXd::Zero(12)); 
     
-    bool manip_flag = false;
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().y() = 0.0;
+    ci.setTargetPose("com", pose, 4.0);
+    ci.waitReachCompleted("com");
+    
+    bool manip_flag = true;
+    
+    double contact_thr = 20.0;       
+    bool right_arm_contact = false;
+    bool left_arm_contact = false;   
     
     if( manip_flag )
     {
-    
-    pose.translation() << 0.78, 0.25, 0.24;
-    pose.linear() = Eigen::Quaterniond(0.76, 0.23, 0.55, 0.27).toRotationMatrix(); //w x y z
+
+    pose.translation() << 0.68, 0.12, 0.1;
+    pose.linear() = Eigen::Quaterniond(0.19, 0.67, -0.04, 0.71).toRotationMatrix(); //w x y z
     ci.setTargetPose("arm1_8", pose, 4.0);
     ci.waitReachCompleted("arm1_8");
 	    
-    pose.translation() << 0.78, -0.25, 0.24;
-    pose.linear() = Eigen::Quaterniond(0.27, 0.55, 0.23, 0.76).toRotationMatrix();
+    pose.translation() << 0.68, -0.12, 0.1;
+    pose.linear() = Eigen::Quaterniond(0.71, -0.04, 0.67, 0.19).toRotationMatrix();
     ci.setTargetPose("arm2_8", pose, 4.0);
-    ci.waitReachCompleted("arm2_8");
-    
-//     bool manip_flag = false;
-//     
-//     if( manip_flag )
-//     {
+    ci.waitReachCompleted("arm2_8");        
    
-	double contact_thr = 30.0;    
-	bool right_arm_contact = false;
-	bool left_arm_contact = false;   
+    ci.setControlMode("arm1_8", Cartesian::ControlType::Velocity);
+    ci.setControlMode("arm2_8", Cartesian::ControlType::Velocity);
 
-	ci.setControlMode("arm1_8", Cartesian::ControlType::Velocity);
-	ci.setControlMode("arm2_8", Cartesian::ControlType::Velocity);
+    while( !(right_arm_contact && left_arm_contact) )
+    {
+      
+      ros::spinOnce();
+      
+      Eigen::Vector3d left_arm_force  = f_est_map["arm1_8"].head(3);
+      Eigen::Vector3d right_arm_force = f_est_map["arm2_8"].head(3);
+      
+      std::cout<<"left_arm f_est norm: "  << left_arm_force.norm()  << std::endl;
+      std::cout<<"right_arm f_est norm: " << right_arm_force.norm() << std::endl;
+      
+      if( left_arm_force.norm() >= contact_thr )
+	left_arm_contact = true;
+      
+      if( right_arm_force.norm() >= contact_thr )
+	right_arm_contact = true;
+      
+      Eigen::Vector6d vel; 
+      vel.setZero();
+      vel.head(3) << 1.0, 0.0, 0.0; vel *= 1e-2;
+      
+      if(!left_arm_contact)
+	ci.setVelocityReference("arm1_8",vel);
+      
+      if(!right_arm_contact)
+	ci.setVelocityReference("arm2_8",vel);
+    }
+    
+    ci.setControlMode("arm1_8", Cartesian::ControlType::Position);
+    ci.setControlMode("arm2_8", Cartesian::ControlType::Position);      
+
+    ci.getPoseFromTf("arm1_8", "ci/world_odom", pose);
+    Eigen::Vector3d left_arm = pose.translation();
+    ci.getPoseFromTf("arm2_8", "ci/world_odom", pose);
+    Eigen::Vector3d right_arm = pose.translation();
+
+    ext_w[0] = 800; // OK with 2 bricks
+    
+    Eigen::Vector3d f_left_arm =  ext_w.head(3)/2.0;
+    Eigen::Vector3d f_right_arm = ext_w.head(3)/2.0;
+    Eigen::Vector6d f_arms;
+
+    f_arms.head(3) = f_left_arm; 
+    f_arms.tail(3) = f_right_arm; 
+
+    ext_w.tail(3) = (left_arm - com_ref).cross(f_left_arm) + (right_arm - com_ref).cross(f_right_arm);
+	    
+    fpub.send_wrench_manip(ext_w);
+
+    fpub.send_force_arms(f_arms);
+
+    set_arms_low_stiffness(robot);
+      
+    double arm_disp = 0.1;
+    bool arm_stop_push = false;
+
+    robot->sense(false);
+    model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);	
+    model->getPose("arm1_8", "pelvis", pose);
+    Eigen::Vector3d start_left_pos = pose.translation();
+    model->getPose("arm2_8", "pelvis", pose);
+    Eigen::Vector3d start_right_pos = pose.translation();
+
+    while (!arm_stop_push) 
+    {
+	ros::spinOnce();
 	
-	while( !(right_arm_contact && left_arm_contact) )
-	{
-	  
-	  ros::spinOnce();
-	  
-	  Eigen::Vector3d left_arm_force  = f_est_map["arm1_8"].head(3);
-	  Eigen::Vector3d right_arm_force = f_est_map["arm2_8"].head(3);
-	  
-	  std::cout<<"left_arm_force.norm(): "  << left_arm_force.norm()  << std::endl;
-	  std::cout<<"right_arm_force.norm(): " << right_arm_force.norm() << std::endl;
-	  
-	  if( left_arm_force.norm() >= contact_thr )
-	    left_arm_contact = true;
-	  
-	  if( right_arm_force.norm() >= contact_thr )
-	    right_arm_contact = true;
-	  
-	  Eigen::Vector6d vel; 
-	  vel.setZero();
-	  vel.head(3) << 1.0, 0.0, 0.0; vel *= 1e-2;
-	  
-	  ci.setVelocityReference("arm1_8",vel);
-	  ci.setVelocityReference("arm2_8",vel);
-	}
-	ci.setControlMode("arm1_8", Cartesian::ControlType::Position);
-	ci.setControlMode("arm2_8", Cartesian::ControlType::Position);      
-	
-	ci.getPoseFromTf("arm1_8", "ci/world_odom", pose);
+	robot->sense(false);
+	model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);	
+	model->getPose("arm1_8", "pelvis", pose);
 	Eigen::Vector3d left_arm = pose.translation();
-	ci.getPoseFromTf("arm2_8", "ci/world_odom", pose);
+	model->getPose("arm2_8", "pelvis", pose);
 	Eigen::Vector3d right_arm = pose.translation();
 	
-	Eigen::Vector3d f_left_arm = ext_w.head(3)/2.0;
-	Eigen::Vector3d f_right_arm = ext_w.head(3)/2.0;
-	Eigen::Vector6d f_arms;
-	
-	f_arms.head(3) = f_left_arm; 
-	f_arms.tail(3) = f_right_arm; 
-	
-	ext_w.tail(3) = (left_arm - com_ref).cross(f_left_arm) + (right_arm - com_ref).cross(f_right_arm);
+	std::cout<<"left_arm disp norm: "  << (start_left_pos - left_arm).norm()  << std::endl;
+        std::cout<<"right_arm disp norn: " << (start_right_pos - right_arm).norm() << std::endl;
 		
-	fpub.send_wrench_manip(ext_w);
-	
-	fpub.send_force_arms(f_arms);
-	
-	set_arms_low_stiffness(robot);
-	  
-	double arm_disp = 0.1;
-	bool arm_stop_push = false;
-	
-	ci.getPoseFromTf("arm1_8", "ci/pelvis", pose);
-	Eigen::Vector3d start_left_pos = pose.translation();  
-	ci.getPoseFromTf("arm2_8", "ci/pelvis", pose);
-	Eigen::Vector3d start_right_pos = pose.translation();
-	
-	while (!arm_stop_push) 
-	{
-	    ros::spinOnce();
-	    
-	    robot->sense(false);
-	    model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);	
-	    model->getPose("arm1_8", "pelvis", pose);
-	    Eigen::Vector3d left_arm = pose.translation();
-	    model->getPose("arm2_8", "pelvis", pose);
-	    Eigen::Vector3d right_arm = pose.translation();
-		    
-	    if( ((start_left_pos - left_arm).norm() >= arm_disp) || ((start_right_pos - right_arm).norm() >= arm_disp) )
-		arm_stop_push = true;
-	}
-	  
-	set_arms_high_stiffness(robot);
-	
-	fpub.send_force_arms(Eigen::Vector6d::Zero());
-	
-	fpub.send_wrench_manip(Eigen::Vector6d::Zero()); 
+	if( ((start_left_pos - left_arm).norm() >= arm_disp) || ((start_right_pos - right_arm).norm() >= arm_disp) )
+	    arm_stop_push = true;
+    }
+      
+//     set_arms_high_stiffness(robot);
+
+    fpub.send_force_arms(Eigen::Vector6d::Zero());
+
+    fpub.send_wrench_manip(Eigen::Vector6d::Zero()); 
           
     }
     
