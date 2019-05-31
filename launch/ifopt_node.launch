@@ -3,11 +3,27 @@
     <arg name="rate" default="10.0"/>
 
     <node pkg="contacts_opt" type="ifopt_contacts_node" name="ifopt_contacts_node" output="screen">
-        <param name="mu" value="0.3"/>
         <param name="is_model_floating_base" type="bool" value="true"/>
         <param name="model_type" value="RBDL"/>
         <param name="rate" value="$(arg rate)"/>  
-        <param name="log" type="bool" value="true"/>
+        <param name="log" type="bool" value="true"/>     
+        
+        <param name="mu" value="0.3"/>
+        
+        <param name="wall_balancing_flag" type="bool" value="true"/>   
+        
+        <param name="manip_flag" type="bool" value="false"/> 
+        
+        <rosparam param="ext_w_init"> [1200.0, 0.0, 0.0, 0.0, 0.0, 0.0] </rosparam>
+        
+        <param name="contact_thr" value="20.0"/>
+        
+        <rosparam param="ext_force_manip"> [800.0, 0.0, 0.0] </rosparam>
+        
+        <param name="arm_disp" value="0.1"/>
+        
+        <param name="ground_balancing_flag" type="bool" value="false"/>   
+        
     </node> 
 
     

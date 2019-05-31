@@ -250,12 +250,6 @@ int main(int argc, char ** argv)
         robot->sense(false);
         model->syncFrom(*robot, XBot::Sync::All, XBot::Sync::MotorSide);
         model->setFloatingBaseState(imu,imu_R_w0);
-// 	Eigen::Matrix3d tmp;
-// 	imu->getOrientation(tmp);
-// 	model->setFloatingBaseOrientation(imu_R_w0*tmp);
-// 	Eigen::Vector3d tmp_v;
-// 	imu->getAngularVelocity(tmp_v);
-// 	model->setFloatingBaseAngularVelocity(imu_R_w0*tmp_v);
 	model->update();
         
         Eigen::Affine3d fb_pose;
@@ -312,7 +306,7 @@ int main(int argc, char ** argv)
             Eigen::Vector6d f_world = pair.second;
 	    f_world.tail(3).setZero();
 	    
-	    std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
+// 	    std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
 	    
 	    if (log) 
             {          
@@ -323,7 +317,7 @@ int main(int argc, char ** argv)
             Eigen::MatrixXd J;           
             model->getJacobian(pair.first, J);
             
-            tau += J.transpose() * f_world;
+            tau -= J.transpose() * f_world;
 	}	
 	
 	for(const auto& pair : f_est_map)
@@ -335,7 +329,7 @@ int main(int argc, char ** argv)
 	   Eigen::Vector3d f_est_world;
 	   f_est_world = pose.linear() * pair.second.head(3);
 	   
-	   logger->add("f_est_" + pair.first, f_est_world);  
+	   logger->add("F_est_" + pair.first, f_est_world);  
 	   
 	}
         

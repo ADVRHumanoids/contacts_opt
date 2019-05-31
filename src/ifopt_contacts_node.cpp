@@ -391,6 +391,27 @@ int main(int argc, char **argv)
 
     double rate = nh_priv.param("rate", 100.0);
     double mu = nh_priv.param("mu", 0.5);
+    bool wall_balancing_flag = nh_priv.param("wall_balancing_flag", false);
+    bool manip_flag = nh_priv.param("manip_flag", false);
+    bool ground_balancing_flag = nh_priv.param("ground_balancing_flag", false);
+    double contact_thr = nh_priv.param("contact_thr", 20.0);  
+    double arm_disp = nh_priv.param("arm_disp", 0.1);
+    
+    XmlRpc::XmlRpcValue param_list;
+    nh_priv.getParam("ext_w_init", param_list);
+    Eigen::Vector6d ext_w_init; ext_w_init.setZero(); 
+    for (int i = 0; i < param_list.size(); ++i) 
+    {
+      ext_w_init[i] = param_list[i];
+    }
+    
+    nh_priv.getParam("ext_force_manip", param_list);
+    Eigen::Vector3d ext_force_manip; ext_force_manip.setZero(); 
+    for (int i = 0; i < param_list.size(); ++i) 
+    {
+      ext_force_manip[i] = param_list[i];
+    }
+    
         
     ros::Rate loop_rate(rate);
 
@@ -485,10 +506,6 @@ int main(int argc, char **argv)
     Eigen::VectorXd n_opt;   n_opt.setZero(12);
     Eigen::VectorXd com_opt; com_opt.setZero(3);
 
-    Eigen::VectorXd ext_w;
-    ext_w.setZero(6);
-    ext_w[0] = 1200.0;
-
     Eigen::Vector3d F_max;
     F_max.setOnes();
     F_max *= 500;
@@ -519,7 +536,7 @@ int main(int argc, char **argv)
     double Wcom = 100;
    
     /*SOLVE*/
-    solve_initial_opt(p_bounds, F_max, C, R, P, p_ref, Wp, com_ref, Wcom, m, mu, ext_w, x_opt);
+    solve_initial_opt(p_bounds, F_max, C, R, P, p_ref, Wp, com_ref, Wcom, m, mu, ext_w_init, x_opt);
     
     p_opt = x_opt.head(12);
     F_opt = x_opt.segment<12> (12);
@@ -530,7 +547,7 @@ int main(int argc, char **argv)
     {
         logger->add("com_ref", com_ref);
         logger->add("p_ref", p_ref);
-        logger->add("F_ref", ext_w.head(3));
+        logger->add("F_ref", ext_w_init.head(3));
         logger->add("x_sol_initial", x_opt);
         logger->add("com_initial", com_opt);
         logger->add("p_initial", p_opt);
@@ -594,11 +611,9 @@ int main(int argc, char **argv)
 	
     }
     
-    g_fmap_ptr = &f_est_map;
+    g_fmap_ptr = &f_est_map;      
     
-    bool balancing_flag = true;
-    
-    if ( balancing_flag )
+    if ( wall_balancing_flag )
     {
    
     for (int i : {0,1,2,3})  
@@ -678,7 +693,6 @@ int main(int argc, char **argv)
 	    
 	    ros::Rate rate(100.0);
 	    
-	    double contact_thr = 80.0;	    
 	    bool contact_detection = false;	    
 	    	    
 	    ci.setControlMode(feet[i], Cartesian::ControlType::Velocity);
@@ -726,10 +740,7 @@ int main(int argc, char **argv)
     pose.translation().y() = 0.0;
     ci.setTargetPose("com", pose, 4.0);
     ci.waitReachCompleted("com");
-    
-    bool manip_flag = true;
-    
-    double contact_thr = 20.0;       
+         
     bool right_arm_contact = false;
     bool left_arm_contact = false;   
     
@@ -768,7 +779,7 @@ int main(int argc, char **argv)
       
       Eigen::Vector6d vel; 
       vel.setZero();
-      vel.head(3) << 1.0, 0.0, 0.0; vel *= 1e-2;
+      vel.head(3) << 1.5, 0.0, 0.0; vel *= 1e-2;
       
       if(!left_arm_contact)
 	ci.setVelocityReference("arm1_8",vel);
@@ -784,25 +795,24 @@ int main(int argc, char **argv)
     Eigen::Vector3d left_arm = pose.translation();
     ci.getPoseFromTf("arm2_8", "ci/world_odom", pose);
     Eigen::Vector3d right_arm = pose.translation();
-
-    ext_w[0] = 800; // OK with 2 bricks
     
-    Eigen::Vector3d f_left_arm =  ext_w.head(3)/2.0;
-    Eigen::Vector3d f_right_arm = ext_w.head(3)/2.0;
+    Eigen::Vector3d f_left_arm =  ext_force_manip/2.0;
+    Eigen::Vector3d f_right_arm = ext_force_manip/2.0;
     Eigen::Vector6d f_arms;
 
     f_arms.head(3) = f_left_arm; 
     f_arms.tail(3) = f_right_arm; 
-
-    ext_w.tail(3) = (left_arm - com_ref).cross(f_left_arm) + (right_arm - com_ref).cross(f_right_arm);
+    
+    Eigen::Vector6d ext_w_manip; 
+    ext_w_manip.head(3) = ext_force_manip;
+    ext_w_manip.tail(3) = (left_arm - com_ref).cross(f_left_arm) + (right_arm - com_ref).cross(f_right_arm);
 	    
-    fpub.send_wrench_manip(ext_w);
+    fpub.send_wrench_manip(ext_w_manip);
 
-    fpub.send_force_arms(f_arms);
+    fpub.send_force_arms(-f_arms);
 
     set_arms_low_stiffness(robot);
       
-    double arm_disp = 0.1;
     bool arm_stop_push = false;
 
     robot->sense(false);
@@ -830,13 +840,62 @@ int main(int argc, char **argv)
 	    arm_stop_push = true;
     }
       
-//     set_arms_high_stiffness(robot);
-
     fpub.send_force_arms(Eigen::Vector6d::Zero());
 
     fpub.send_wrench_manip(Eigen::Vector6d::Zero()); 
           
     }
+    
+    
+    if ( wall_balancing_flag && ground_balancing_flag )
+    {
+      
+    const int N_ITER = 400;
+    for(int k = 0; k < N_ITER; k++)
+        ros::Duration(0.01).sleep();
+
+    for (int i : {3,2})  
+    {
+ 
+        Eigen::Vector3d pi = p_ref.segment<3> (3 * i);
+	pi.z() = ground_z;
+      
+        Eigen::Vector3d ni = - n_opt.segment<3> (0);
+	
+	Eigen::Matrix3d R; R.setZero();
+	compute_RotM(ni, R);
+	
+        fpub.send_force(F_opt_legs[i]); 
+	fpub.send_normal(n_opt_legs[i]);
+      
+	Eigen::Affine3d w_T_com;
+	w_T_com.setIdentity();
+        w_T_com.translation() = com_opt_legs[i];
+        ci.setTargetPose("com", w_T_com, 5.0);
+        ci.waitReachCompleted("com");
+
+        Eigen::Affine3d w_T_f;
+	w_T_f.setIdentity();
+        w_T_f.translation() = pi;  
+	ci.setTargetPose(feet[i], w_T_f, 4.0);
+	Eigen::Affine3d a_T_f;
+	a_T_f.translation() = ni;
+	a_T_f.linear() =  R.transpose();
+	ci.setTargetPose(ankle[i], a_T_f, 4.0);	
+	ci.waitReachCompleted(feet[i]);
+        ci.waitReachCompleted(ankle[i]);
+
+
+    }
+    
+    }
+  
+    fpub.send_force(Eigen::VectorXd::Zero(12)); 
+    
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().y() = 0.0;
+    ci.setTargetPose("com", pose, 4.0);
+    ci.waitReachCompleted("com");
     
 
     while (ros::ok()) 
