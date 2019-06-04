@@ -853,21 +853,47 @@ int main(int argc, char **argv)
     const int N_ITER = 400;
     for(int k = 0; k < N_ITER; k++)
         ros::Duration(0.01).sleep();
+    
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().x() -= 0.05;
+    pose.translation().y() = 0.0;
+    ci.setTargetPose("com", pose, 4.0);
+    ci.waitReachCompleted("com");
+    
+    com_ref = pose.translation();
 
-    for (int i : {3,2})  
+    for (int i : {3, 2})  
     {
- 
+
+      	F_bounds[i] = Eigen::Vector6d::Zero();
+	F_thr[i] = 0.0;
+	p_bounds[i].head(3) = -1e3*Eigen::Vector3d::Ones(); p_bounds[i].tail(3) =  1e3*Eigen::Vector3d::Ones();
+
+        /*SOLVE*/
+	solve_transition_opt(p_bounds, n_bounds, com_bounds, F_bounds, F_thr, p_ref, com_ref, m, mu, Eigen::Vector6d::Zero(), x_opt_legs[i]);
+        
+	F_opt_legs[i] = x_opt_legs[i].segment<12> (12);
+        n_opt_legs[i] = x_opt_legs[i].segment<12> (24);
+        com_opt_legs[i] =  x_opt_legs[i].tail(3);
+         
+	F_bounds[i].setOnes();
+	F_bounds[i].head(3) *= -F_lift_max; F_bounds[i].tail(3) *= F_lift_max;
+        F_thr[i] = thr;
+  
         Eigen::Vector3d pi = p_ref.segment<3> (3 * i);
 	pi.z() = ground_z;
+	
+	p_bounds[i].head(3) = pi; p_bounds[i].tail(3) = pi;
       
         Eigen::Vector3d ni = - n_opt.segment<3> (0);
+	n_bounds[i].head(3) = -ni; n_bounds[i].tail(3) = -ni;
 	
 	Eigen::Matrix3d R; R.setZero();
 	compute_RotM(ni, R);
 	
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
-      
+	     
 	Eigen::Affine3d w_T_com;
 	w_T_com.setIdentity();
         w_T_com.translation() = com_opt_legs[i];
@@ -884,6 +910,14 @@ int main(int argc, char **argv)
 	ci.setTargetPose(ankle[i], a_T_f, 4.0);	
 	ci.waitReachCompleted(feet[i]);
         ci.waitReachCompleted(ankle[i]);
+	
+	if (log) 
+        {
+            logger->add("p_off_the_wall", p_opt_legs[i]);
+            logger->add("F_off_the_wall", F_opt_legs[i]);
+            logger->add("n_off_the_wall", n_opt_legs[i]);
+	    logger->add("com_off_the_wall", com_opt_legs[i]);
+        }
 
 
     }
@@ -891,7 +925,7 @@ int main(int argc, char **argv)
     }
   
     fpub.send_force(Eigen::VectorXd::Zero(12)); 
-    
+     
     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
     pose.translation().y() = 0.0;
     ci.setTargetPose("com", pose, 4.0);

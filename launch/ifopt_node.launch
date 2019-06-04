@@ -10,19 +10,18 @@
         
         <param name="mu" value="0.3"/>
         
-        <param name="wall_balancing_flag" type="bool" value="true"/>   
-        
+        <param name="wall_balancing_flag" type="bool" value="true"/>         
         <param name="manip_flag" type="bool" value="false"/> 
+        <param name="ground_balancing_flag" type="bool" value="true"/>   
         
         <rosparam param="ext_w_init"> [1200.0, 0.0, 0.0, 0.0, 0.0, 0.0] </rosparam>
         
-        <param name="contact_thr" value="20.0"/>
+        <param name="contact_thr" value="30.0"/>
         
         <rosparam param="ext_force_manip"> [800.0, 0.0, 0.0] </rosparam>
         
         <param name="arm_disp" value="0.1"/>
         
-        <param name="ground_balancing_flag" type="bool" value="false"/>   
         
     </node> 
 
