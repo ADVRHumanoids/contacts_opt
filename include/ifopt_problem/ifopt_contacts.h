@@ -91,7 +91,7 @@ public:
         _W_p = 0;
         _W_com = 0;
         _W_force = 1;
-        _p_ref.setZero(12);
+        _p_ref.setZero(18);
         _com_ref.setZero();
     
     }
@@ -122,7 +122,7 @@ public:
         
             double value = 0;
                 
-            for(int i : {1, 2, 3, 4})
+            for(int i : {1, 2, 3, 4, 5, 6})
             {
                 Eigen::Vector3d Fi = GetVariables()->GetComponent("F" + std::to_string(i))->GetValues();
                 Eigen::Vector3d pi = GetVariables()->GetComponent("p" + std::to_string(i))->GetValues();
@@ -140,7 +140,7 @@ public:
     void FillJacobianBlock (std::string var_set, Jacobian& jac) const override
     {
         jac.setZero();
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < 6; i++)
         {
             if(var_set == ("F" + std::to_string(i+1)))
             {
@@ -424,7 +424,7 @@ public:
             Eigen::Vector3d F = GetVariables()->GetComponent(fname_)->GetValues();  
   
             int k; 
-            for(int i = 0; i < 4; i++)
+            for(int i = 0; i < 6; i++)
             {
                 if(fname_ == ("F" + std::to_string(i+1)))
                 {
@@ -469,7 +469,7 @@ public:
       Eigen::Vector3d F = GetVariables()->GetComponent(fname_)->GetValues();  
       
        int k; 
-       for(int i = 0; i < 4; i++)
+       for(int i = 0; i < 6; i++)
        {
            if(fname_ == ("F" + std::to_string(i+1)))
            {
@@ -551,7 +551,7 @@ public:
         Eigen::Vector3d p = GetVariables()->GetComponent(pname_)->GetValues(); 
         
         int k; 
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < 6; i++)
         {
             if(pname_ == ("p" + std::to_string(i+1)))
             {
@@ -612,7 +612,7 @@ public:
         Eigen::Vector3d p = GetVariables()->GetComponent(pname_)->GetValues();  
       
         int k; 
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < 6; i++)
         {
             if(pname_ == ("p" + std::to_string(i+1)))
             {

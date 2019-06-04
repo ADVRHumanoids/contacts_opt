@@ -17,6 +17,56 @@ using namespace ifopt;
 
 XBot::MatLogger::Ptr logger;
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
+Eigen::Affine3d pose;
+Eigen::Vector3d com_ref, pelvis, wheel_1, wheel_2, wheel_3, wheel_4, left_arm, right_arm;
+double ground_z;  
+
+void set_up(XBot::Cartesian::RosImpl &ci)
+{
+  
+    /* Lowering the Homing CoM */
+    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().z() -= 0.05;
+    com_ref = pose.translation();
+    ci.setTargetPose("com", pose, 2.0);
+    ci.waitReachCompleted("com");
+
+    ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
+    pelvis = pose.translation();
+    
+    double wheel_offset_x = 0.35;
+    double wheel_offset_y = 0.35;
+
+    ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
+    wheel_1 = pose.translation();
+    wheel_1.x() =  pelvis.x() + wheel_offset_x;
+    wheel_1.y() =  pelvis.y() + wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
+    wheel_2 = pose.translation();
+    wheel_2.x() =  pelvis.x() + wheel_offset_x;
+    wheel_2.y() =  pelvis.y() - wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
+    wheel_3 = pose.translation();
+    wheel_3.x() =  pelvis.x() - wheel_offset_x;
+    wheel_3.y() =  pelvis.y() + wheel_offset_y;
+
+    ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
+    wheel_4 = pose.translation();
+    wheel_4.x() =  pelvis.x() - wheel_offset_x;
+    wheel_4.y() =  pelvis.y() - wheel_offset_y;
+    
+    ci.getPoseFromTf("ci/arm1_8", "ci/world_odom", pose);
+    left_arm = pose.translation();
+
+    ci.getPoseFromTf("ci/arm2_8", "ci/world_odom", pose);
+    right_arm = pose.translation();
+    
+    ground_z = wheel_1.z(); 
+
+   
+}
 
 void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot)
 {
@@ -137,16 +187,22 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     auto p2 = std::make_shared<ExVariables> ("p2");
     auto p3 = std::make_shared<ExVariables> ("p3");
     auto p4 = std::make_shared<ExVariables> ("p4");
+    auto p5 = std::make_shared<ExVariables> ("p5");
+    auto p6 = std::make_shared<ExVariables> ("p6");
 
     auto F1 = std::make_shared<ExVariables> ("F1");
     auto F2 = std::make_shared<ExVariables> ("F2");
     auto F3 = std::make_shared<ExVariables> ("F3");
     auto F4 = std::make_shared<ExVariables> ("F4");
+    auto F5 = std::make_shared<ExVariables> ("F5");
+    auto F6 = std::make_shared<ExVariables> ("F6");
 
     auto n1 = std::make_shared<ExVariables> ("n1");
     auto n2 = std::make_shared<ExVariables> ("n2");
     auto n3 = std::make_shared<ExVariables> ("n3");
     auto n4 = std::make_shared<ExVariables> ("n4");
+    auto n5 = std::make_shared<ExVariables> ("n5");
+    auto n6 = std::make_shared<ExVariables> ("n6");
 
     auto com = std::make_shared<ExVariables> ("com");
 
@@ -156,16 +212,22 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     auto SE_p2 = std::make_shared<SuperEllipsoidConstraint> ("p2");
     auto SE_p3 = std::make_shared<SuperEllipsoidConstraint> ("p3");
     auto SE_p4 = std::make_shared<SuperEllipsoidConstraint> ("p4");
+    auto SE_p5 = std::make_shared<SuperEllipsoidConstraint> ("p5");
+    auto SE_p6 = std::make_shared<SuperEllipsoidConstraint> ("p6");
 
     auto fr_F1 = std::make_shared<FrictionConstraint> ("F1");
     auto fr_F2 = std::make_shared<FrictionConstraint> ("F2");
     auto fr_F3 = std::make_shared<FrictionConstraint> ("F3");
     auto fr_F4 = std::make_shared<FrictionConstraint> ("F4");
+    auto fr_F5 = std::make_shared<FrictionConstraint> ("F5");
+    auto fr_F6 = std::make_shared<FrictionConstraint> ("F6");
 
     auto n_p1 = std::make_shared<NormalConstraint> ("p1");
     auto n_p2 = std::make_shared<NormalConstraint> ("p2");
     auto n_p3 = std::make_shared<NormalConstraint> ("p3");
-    auto n_p4 = std::make_shared<NormalConstraint> ("p4");
+    auto n_p4 = std::make_shared<NormalConstraint> ("p4");   
+    auto n_p5 = std::make_shared<NormalConstraint> ("p5");
+    auto n_p6 = std::make_shared<NormalConstraint> ("p6");
 
     auto cost = std::make_shared<ExCost>();
 
@@ -173,11 +235,15 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     nlp.AddVariableSet(p2);
     nlp.AddVariableSet(p3);
     nlp.AddVariableSet(p4);
+    nlp.AddVariableSet(p5);
+    nlp.AddVariableSet(p6);
     
     p1->SetBounds(p_bounds[0].head(3), p_bounds[0].tail(3));    
     p2->SetBounds(p_bounds[1].head(3), p_bounds[1].tail(3));
     p3->SetBounds(p_bounds[2].head(3), p_bounds[2].tail(3));
     p4->SetBounds(p_bounds[3].head(3), p_bounds[3].tail(3));
+    p5->SetBounds(p_bounds[4].head(3), p_bounds[4].tail(3));
+    p6->SetBounds(p_bounds[5].head(3), p_bounds[5].tail(3));
 
     nlp.AddVariableSet(F1);
     F1->SetBounds(-F_max, F_max);
@@ -187,11 +253,17 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     F3->SetBounds(-F_max, F_max);
     nlp.AddVariableSet(F4);
     F4->SetBounds(-F_max, F_max);
+    nlp.AddVariableSet(F5);
+    F5->SetBounds(-F_max, F_max);
+    nlp.AddVariableSet(F6);
+    F6->SetBounds(-F_max, F_max);
 
     nlp.AddVariableSet(n1);
     nlp.AddVariableSet(n2);
     nlp.AddVariableSet(n3);
     nlp.AddVariableSet(n4);
+    nlp.AddVariableSet(n5);
+    nlp.AddVariableSet(n6);
 
     nlp.AddVariableSet(com);
     
@@ -207,6 +279,10 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     nlp.AddConstraintSet(SE_p3);
     SE_p4->SetParam(C, R, P);
     nlp.AddConstraintSet(SE_p4);
+    SE_p5->SetParam(C, R, P);
+    nlp.AddConstraintSet(SE_p5);
+    SE_p6->SetParam(C, R, P);
+    nlp.AddConstraintSet(SE_p6);
 
     fr_F1->set_mu(mu);
     nlp.AddConstraintSet(fr_F1);
@@ -216,6 +292,10 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     nlp.AddConstraintSet(fr_F3);
     fr_F4->set_mu(mu);
     nlp.AddConstraintSet(fr_F4);
+    fr_F3->set_mu(mu);
+    nlp.AddConstraintSet(fr_F5);
+    fr_F4->set_mu(mu);
+    nlp.AddConstraintSet(fr_F6);
 
     n_p1->SetParam(C, R, P);
     nlp.AddConstraintSet(n_p1);
@@ -225,8 +305,11 @@ void solve_initial_opt(const std::vector <Eigen::Vector6d> &p_bounds, const Eige
     nlp.AddConstraintSet(n_p3);
     n_p4->SetParam(C, R, P);
     nlp.AddConstraintSet(n_p4);
-
-    
+    n_p5->SetParam(C, R, P);
+    nlp.AddConstraintSet(n_p5);
+    n_p6->SetParam(C, R, P);
+    nlp.AddConstraintSet(n_p6);
+  
     cost->SetPosRef(p_ref, Wp);
     
     cost->SetCOMRef(com_ref, Wcom);
@@ -412,7 +495,8 @@ int main(int argc, char **argv)
       ext_force_manip[i] = param_list[i];
     }
     
-        
+    auto force_links = nh_priv.param("force_links", std::vector<std::string>());
+            
     ros::Rate loop_rate(rate);
 
     ConfigOptions config = XBot::ConfigOptionsFromParamServer();
@@ -430,51 +514,16 @@ int main(int argc, char **argv)
     ss << "/tmp/ifopt_node";
 
     if (log)
-        logger = XBot::MatLogger::getLogger(ss.str());
+        logger = XBot::MatLogger::getLogger(ss.str());  
     
-    set_legs_initial_stiffness(robot);
-
-    Eigen::Affine3d pose;
-    
-    /* Lowering the Homing CoM */
-    ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
-    pose.translation().z() -= 0.05;
-    Eigen::Vector3d com_ref = pose.translation();
-    ci.setTargetPose("com", pose, 2.0);
-    ci.waitReachCompleted("com");
-
-    ci.getPoseFromTf("ci/pelvis", "ci/world_odom", pose);
-    Eigen::Vector3d pelvis = pose.translation();
-    
-    double wheel_offset_x = 0.35;
-    double wheel_offset_y = 0.35;
-
-    ci.getPoseFromTf("ci/wheel_1", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_1 = pose.translation();
-    wheel_1.x() =  pelvis.x() + wheel_offset_x;
-    wheel_1.y() =  pelvis.y() + wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_2", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_2 = pose.translation();
-    wheel_2.x() =  pelvis.x() + wheel_offset_x;
-    wheel_2.y() =  pelvis.y() - wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_3", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_3 = pose.translation();
-    wheel_3.x() =  pelvis.x() - wheel_offset_x;
-    wheel_3.y() =  pelvis.y() + wheel_offset_y;
-
-    ci.getPoseFromTf("ci/wheel_4", "ci/world_odom", pose);
-    Eigen::Vector3d wheel_4 = pose.translation();
-    wheel_4.x() =  pelvis.x() - wheel_offset_x;
-    wheel_4.y() =  pelvis.y() - wheel_offset_y;
-
-    double ground_z = wheel_1.z();  
+    /* Set-up*/ 
+    set_legs_initial_stiffness(robot);    
+    set_up(ci);
 
     /* Environment super-ellipsoid parameters*/ 
     Eigen::Vector3d C, R, P;
     
-    C << pelvis.x() + 20.0, 
+    C << pelvis.x() + 0.1, 
          pelvis.y(), 
          pelvis.z();
          
@@ -493,24 +542,26 @@ int main(int argc, char **argv)
     
     /* INITIAL OPT - Manipulation*/
     Eigen::VectorXd p_ref;
-    p_ref.setZero(12);
+    p_ref.setZero(18);
 
     p_ref.head(3) = wheel_1;
     p_ref.segment<3>(3) = wheel_2;
     p_ref.segment<3>(6) = wheel_3;
-    p_ref.tail(3) = wheel_4;
+    p_ref.segment<3>(9) = wheel_4;
+    p_ref.segment<3>(12) = left_arm;
+    p_ref.tail(3) = right_arm;
 
-    Eigen::VectorXd x_opt;   x_opt.setZero(39);
-    Eigen::VectorXd p_opt;   p_opt.setZero(12);
-    Eigen::VectorXd F_opt;   F_opt.setZero(12);
-    Eigen::VectorXd n_opt;   n_opt.setZero(12);
+    Eigen::VectorXd x_opt;   x_opt.setZero(57);
+    Eigen::VectorXd p_opt;   p_opt.setZero(18);
+    Eigen::VectorXd F_opt;   F_opt.setZero(18);
+    Eigen::VectorXd n_opt;   n_opt.setZero(18);
     Eigen::VectorXd com_opt; com_opt.setZero(3);
 
     Eigen::Vector3d F_max;
     F_max.setOnes();
     F_max *= 500;
       
-    Eigen::Vector6d p1_bounds, p2_bounds, p3_bounds, p4_bounds;
+    Eigen::Vector6d p1_bounds, p2_bounds, p3_bounds, p4_bounds, p5_bounds, p6_bounds;
     double delta = 0.3;
     
     p1_bounds.setZero(); 
@@ -529,7 +580,15 @@ int main(int argc, char **argv)
     p4_bounds.head(3) = wheel_4 - Eigen::Vector3d(delta, delta, 0.0); 
     p4_bounds.tail(3) = wheel_4 + Eigen::Vector3d(0.0, 0.0, delta);
     
-    std::vector <Eigen::Vector6d> p_bounds{p1_bounds, p2_bounds, p3_bounds, p4_bounds};
+    p5_bounds.setZero(); 
+    p5_bounds.head(3) = left_arm - Eigen::Vector3d(delta, delta, delta); 
+    p5_bounds.tail(3) = left_arm + Eigen::Vector3d(delta, delta, delta);
+    
+    p6_bounds.setZero(); 
+    p6_bounds.head(3) = right_arm - Eigen::Vector3d(delta, delta, delta); 
+    p6_bounds.tail(3) = right_arm + Eigen::Vector3d(delta, delta, delta);
+    
+    std::vector <Eigen::Vector6d> p_bounds{p1_bounds, p2_bounds, p3_bounds, p4_bounds, p5_bounds, p6_bounds};
    
     double m = model->getMass();
     double Wp = 10;
@@ -538,9 +597,9 @@ int main(int argc, char **argv)
     /*SOLVE*/
     solve_initial_opt(p_bounds, F_max, C, R, P, p_ref, Wp, com_ref, Wcom, m, mu, ext_w_init, x_opt);
     
-    p_opt = x_opt.head(12);
-    F_opt = x_opt.segment<12> (12);
-    n_opt = x_opt.segment<12> (24);
+    p_opt = x_opt.head(18);
+    F_opt = x_opt.segment<18> (18);
+    n_opt = x_opt.segment<18> (36);
     com_opt =  x_opt.tail(3);
 
     if (log) 
@@ -599,8 +658,7 @@ int main(int argc, char **argv)
     std::map<std::string, ros::Subscriber> sub_force_map;
     std::map<std::string, Eigen::Vector6d> f_est_map;
     
-    std::vector<std::string> force_links  = {"wheel_1", "wheel_2", "wheel_3", "wheel_4", "arm1_8", "arm2_8"};
-    
+
     for(auto l : force_links)
     {
         auto sub_force = ros::NodeHandle("cartesian").subscribe<geometry_msgs::WrenchStamped>("force_estimation/" + l, 1, boost::bind(on_force_recv, _1, l));	

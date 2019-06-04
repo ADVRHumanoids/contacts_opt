@@ -6,11 +6,13 @@
         <param name="is_model_floating_base" type="bool" value="true"/>
         <param name="model_type" value="RBDL"/>
         <param name="rate" value="$(arg rate)"/>  
-        <param name="log" type="bool" value="true"/>     
+        <param name="log" type="bool" value="true"/>   
+        
+        <param name="force_links" type="yaml" value="[wheel_1, wheel_2, wheel_3, wheel_4, arm1_8, arm2_8]"/>
         
         <param name="mu" value="0.3"/>
         
-        <param name="wall_balancing_flag" type="bool" value="true"/>   
+        <param name="wall_balancing_flag" type="bool" value="false"/>   
         
         <param name="manip_flag" type="bool" value="false"/> 
         
