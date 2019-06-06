@@ -747,16 +747,16 @@ int main(int argc, char **argv)
     if( manip_flag )
     {
 
-    pose.translation() << 0.68, 0.12, 0.1;
+    pose.translation() << 0.55, 0.14, 0.1; // OK table close
     pose.linear() = Eigen::Quaterniond(0.19, 0.67, -0.04, 0.71).toRotationMatrix(); //w x y z
     ci.setTargetPose("arm1_8", pose, 4.0);
     ci.waitReachCompleted("arm1_8");
 	    
-    pose.translation() << 0.68, -0.12, 0.1;
+    pose.translation() << 0.55, -0.14, 0.1;
     pose.linear() = Eigen::Quaterniond(0.71, -0.04, 0.67, 0.19).toRotationMatrix();
     ci.setTargetPose("arm2_8", pose, 4.0);
-    ci.waitReachCompleted("arm2_8");        
-   
+    ci.waitReachCompleted("arm2_8");   
+    
     ci.setControlMode("arm1_8", Cartesian::ControlType::Velocity);
     ci.setControlMode("arm2_8", Cartesian::ControlType::Velocity);
 
@@ -834,7 +834,7 @@ int main(int argc, char **argv)
 	Eigen::Vector3d right_arm = pose.translation();
 	
 	std::cout<<"left_arm disp norm: "  << (start_left_pos - left_arm).norm()  << std::endl;
-        std::cout<<"right_arm disp norn: " << (start_right_pos - right_arm).norm() << std::endl;
+        std::cout<<"right_arm disp norm: " << (start_right_pos - right_arm).norm() << std::endl;
 		
 	if( ((start_left_pos - left_arm).norm() >= arm_disp) || ((start_right_pos - right_arm).norm() >= arm_disp) )
 	    arm_stop_push = true;
@@ -853,6 +853,7 @@ int main(int argc, char **argv)
     const int N_ITER = 400;
     for(int k = 0; k < N_ITER; k++)
         ros::Duration(0.01).sleep();
+    
     
     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
     pose.translation().x() -= 0.05;
