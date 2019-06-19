@@ -18,7 +18,7 @@
         
         <param name="contact_thr" value="30.0"/>
         
-        <rosparam param="ext_force_manip"> [800.0, 0.0, 0.0] </rosparam>
+        <rosparam param="ext_force_manip"> [900.0, 0.0, 0.0] </rosparam>
         
         <param name="arm_disp" value="0.25"/>
         

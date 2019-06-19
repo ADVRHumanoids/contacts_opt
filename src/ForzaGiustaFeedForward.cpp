@@ -304,9 +304,7 @@ int main(int argc, char ** argv)
 	for (const auto& pair : f_ref_arms_map)
 	{
             Eigen::Vector6d f_world = pair.second;
-	    f_world.tail(3).setZero();
-	    
-// 	    std::cout << "F_" + pair.first + ": " << f_world.head(3) << std::endl;
+	    f_world.tail(3).setZero();	    
 	    
 	    if (log) 
             {          

@@ -535,7 +535,7 @@ int main(int argc, char **argv)
     double Wp = 10;
     double Wcom = 100;
    
-    /*SOLVE*/
+    /* SOLVE */
     solve_initial_opt(p_bounds, F_max, C, R, P, p_ref, Wp, com_ref, Wcom, m, mu, ext_w_init, x_opt);
     
     p_opt = x_opt.head(12);
@@ -651,37 +651,27 @@ int main(int argc, char **argv)
 	
         fpub.send_force(F_opt_legs[i]); 
 	fpub.send_normal(n_opt_legs[i]);
-      
-	Eigen::Affine3d w_T_com;
-	w_T_com.setIdentity();
-        w_T_com.translation() = com_opt_legs[i];
-        ci.setTargetPose("com", w_T_com, 5.0);
-        ci.waitReachCompleted("com");
-
-        Eigen::Affine3d w_T_f1;
-        w_T_f1.translation() = pi;
 	
 	if( (i==0) || (i==1) )
 	{
-	    w_T_f1.translation().z() += 0.2;
-	
-	    Eigen::Affine3d w_T_f2;
-	    w_T_f2.translation() = pi;
-
-	    Trajectory::WayPointVector wp;
-	    wp.emplace_back(w_T_f1, 2.0);    // absolute time w.r.t. start of traj
-	    wp.emplace_back(w_T_f2, 4.0);
-	    ci.setWayPoints(feet[i], wp);
 	    Eigen::Affine3d a_T_f;
 	    a_T_f.translation() = ni;
 	    a_T_f.linear() =  R.transpose();
 	    ci.setTargetPose(ankle[i], a_T_f, 2.0);
-	    ci.waitReachCompleted(feet[i]);
 	    ci.waitReachCompleted(ankle[i]);
 	    
 	}
  	else 
 	{	   
+	    Eigen::Affine3d w_T_com;
+	    w_T_com.setIdentity();
+            w_T_com.translation() = com_opt_legs[i];
+            ci.setTargetPose("com", w_T_com, 5.0);
+            ci.waitReachCompleted("com");
+
+            Eigen::Affine3d w_T_f1;
+            w_T_f1.translation() = pi;
+	  
 	    ci.setTargetPose(feet[i], w_T_f1, 4.0);
 	    Eigen::Affine3d a_T_f;
 	    a_T_f.translation() = ni;
@@ -921,16 +911,19 @@ int main(int argc, char **argv)
         }
 
 
-    }
-    
-    }
+    }   
   
     fpub.send_force(Eigen::VectorXd::Zero(12)); 
      
     ci.getPoseFromTf("ci/com", "ci/world_odom", pose);
+    pose.translation().x() -= 0.05;
     pose.translation().y() = 0.0;
     ci.setTargetPose("com", pose, 4.0);
     ci.waitReachCompleted("com");
+    
+    }
+    
+    fpub.send_force(Eigen::VectorXd::Zero(12)); 
     
 
     while (ros::ok()) 
