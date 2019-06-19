@@ -18,14 +18,39 @@ using namespace ifopt;
 XBot::MatLogger::Ptr logger;
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 
-void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot)
+void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorXd &K_0)
 {
    
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd K_0, K_end(6);
+    Eigen::VectorXd K_end(6);
     robot->leg(0).getStiffness(K_0);
     K_end << 500, 500, 500, 250, 50, 50;
+    
+    const int N_ITER = 400;
+    for(int k = 0; k < N_ITER; k++)
+    {
+        for(int i = 0; i < 4; i++)
+        {
+            Eigen::VectorXd leg_k(robot->leg(i).getJointNum());
+            leg_k = K_0 + k/(N_ITER-1)*(K_end-K_0);
+            robot->leg(i).setStiffness(leg_k);
+        }
+        
+        robot->move();
+        
+        ros::Duration(0.01).sleep();
+    }
+   
+}
+
+void set_legs_default_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorXd &K_end)
+{
+   
+    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
+    
+    Eigen::VectorXd K_0;
+    robot->leg(0).getStiffness(K_0);
     
     const int N_ITER = 400;
     for(int k = 0; k < N_ITER; k++)
@@ -432,7 +457,8 @@ int main(int argc, char **argv)
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
     
-    set_legs_initial_stiffness(robot);
+    Eigen::VectorXd K0;
+    set_legs_initial_stiffness(robot, K0);
 
     Eigen::Affine3d pose;
     
@@ -920,6 +946,8 @@ int main(int argc, char **argv)
     pose.translation().y() = 0.0;
     ci.setTargetPose("com", pose, 4.0);
     ci.waitReachCompleted("com");
+    
+    set_legs_default_stiffness(robot, K0);
     
     }
     
