@@ -69,37 +69,13 @@ void set_legs_default_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorX
    
 }
 
-void set_leg_stiffness(XBot::RobotInterface::Ptr robot, const std::string chain)
-{
-        
-    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
-    
-    Eigen::VectorXd K_0, K_end(6);
-    robot->chain(chain).getStiffness(K_0);
-    K_end = K_0;
-    K_end[1] = 20.0; // hip pitch
-    K_end[2] = 20.0; // knee pitch
-          
-    const int N_ITER = 10;
-    for(int k = 0; k < N_ITER; k++)
-    {
-	Eigen::VectorXd leg_k(robot->chain(chain).getJointNum());
-        leg_k = K_0 + k/(N_ITER-1)*(K_end-K_0);
-        robot->chain(chain).setStiffness(leg_k);
-        
-        robot->move();
-        
-        ros::Duration(0.01).sleep();
-    }
-   
-}
 
-void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
+void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd &K_0)
 {
           
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd  K_0, K_end(7);
+    Eigen::VectorXd  K_end(7);
     robot->arm(0).getStiffness(K_0);
     K_end = K_0;
     K_end.head(4) << 50.0, 50.0, 50.0, 50.0;
@@ -121,17 +97,15 @@ void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
    
 }
 
-void set_arms_high_stiffness(XBot::RobotInterface::Ptr robot)
+void set_arms_default_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd &K_end)
 {
-     
-    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping()); 
-     
-    Eigen::VectorXd  K_0, K_end(7);
+          
+    robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
+    
+    Eigen::VectorXd  K_0;
     robot->arm(0).getStiffness(K_0);
-    K_end = K_0;
-    K_end.head(4) << 50.0, 50.0, 50.0, 50.0;
- 
-    const int N_ITER = 200;
+  
+    const int N_ITER = 10;
     for(int k = 0; k < N_ITER; k++)
     {
         for(int i = 0; i < 2; i++)
@@ -457,8 +431,8 @@ int main(int argc, char **argv)
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
     
-    Eigen::VectorXd K0;
-    set_legs_initial_stiffness(robot, K0);
+    Eigen::VectorXd K0_legs, K0_arms;
+    set_legs_initial_stiffness(robot, K0_legs);
 
     Eigen::Affine3d pose;
     
@@ -827,7 +801,7 @@ int main(int argc, char **argv)
 
     fpub.send_force_arms(-f_arms);
 
-    set_arms_low_stiffness(robot);
+    set_arms_low_stiffness(robot,K0_arms);
       
     bool arm_stop_push = false;
 
@@ -947,7 +921,8 @@ int main(int argc, char **argv)
     ci.setTargetPose("com", pose, 4.0);
     ci.waitReachCompleted("com");
     
-    set_legs_default_stiffness(robot, K0);
+    set_legs_default_stiffness(robot, K0_legs);
+    set_arms_default_stiffness(robot, K0_arms);
     
     }
     
