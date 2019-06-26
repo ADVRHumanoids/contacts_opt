@@ -18,12 +18,12 @@ using namespace ifopt;
 XBot::MatLogger::Ptr logger;
 std::map<std::string, Eigen::Vector6d> * g_fmap_ptr;
 
-void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorXd &K_0)
+void set_legs_initial_stiffness(XBot::RobotInterface::Ptr robot)
 {
    
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd K_end(6);
+    Eigen::VectorXd K_0(6), K_end(6);
     robot->leg(0).getStiffness(K_0);
     K_end << 500, 500, 500, 250, 50, 50;
     
@@ -49,7 +49,7 @@ void set_legs_default_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorX
    
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd K_0;
+    Eigen::VectorXd K_0(6);
     robot->leg(0).getStiffness(K_0);
     
     const int N_ITER = 400;
@@ -70,12 +70,12 @@ void set_legs_default_stiffness(XBot::RobotInterface::Ptr robot,  Eigen::VectorX
 }
 
 
-void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd &K_0)
+void set_arms_low_stiffness(XBot::RobotInterface::Ptr robot)
 {
           
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd  K_end(7);
+    Eigen::VectorXd  K_0(7), K_end(7);
     robot->arm(0).getStiffness(K_0);
     K_end = K_0;
     K_end.head(4) << 50.0, 50.0, 50.0, 50.0;
@@ -102,7 +102,7 @@ void set_arms_default_stiffness(XBot::RobotInterface::Ptr robot, Eigen::VectorXd
           
     robot->setControlMode(XBot::ControlMode::Stiffness() + XBot::ControlMode::Damping());
     
-    Eigen::VectorXd  K_0;
+    Eigen::VectorXd  K_0(7);
     robot->arm(0).getStiffness(K_0);
   
     const int N_ITER = 10;
@@ -431,8 +431,14 @@ int main(int argc, char **argv)
     if (log)
         logger = XBot::MatLogger::getLogger(ss.str());
     
-    Eigen::VectorXd K0_legs, K0_arms;
-    set_legs_initial_stiffness(robot, K0_legs);
+    Eigen::VectorXd K0_leg(6), K0_arm(7);
+    robot->leg(0).getStiffness(K0_leg);
+    robot->arm(0).getStiffness(K0_arm);
+    
+    std::cout << "K0_leg: " << K0_leg.transpose() << std::endl;
+    std::cout << "K0_arm: " << K0_arm.transpose() << std::endl;
+    
+    set_legs_initial_stiffness(robot);
 
     Eigen::Affine3d pose;
     
@@ -801,8 +807,8 @@ int main(int argc, char **argv)
 
     fpub.send_force_arms(-f_arms);
 
-    set_arms_low_stiffness(robot,K0_arms);
-      
+    set_arms_low_stiffness(robot);
+    
     bool arm_stop_push = false;
 
     robot->sense(false);
@@ -811,6 +817,10 @@ int main(int argc, char **argv)
     Eigen::Vector3d start_left_pos = pose.translation();
     model->getPose("arm2_8", "pelvis", pose);
     Eigen::Vector3d start_right_pos = pose.translation();
+    
+    ros::Rate arm_loop_rate(100.0);
+    auto arm_loop_start = ros::Time::now();
+    const double ARM_LOOP_TIMEOUT = 10.0;
 
     while (!arm_stop_push) 
     {
@@ -827,7 +837,19 @@ int main(int argc, char **argv)
         std::cout<<"right_arm disp norm: " << (start_right_pos - right_arm).norm() << std::endl;
 		
 	if( ((start_left_pos - left_arm).norm() >= arm_disp) || ((start_right_pos - right_arm).norm() >= arm_disp) )
-	    arm_stop_push = true;
+	{
+	  std::cout << "Box shifted, exiting." << std::endl;  
+	  arm_stop_push = true;
+	}
+	
+	if((ros::Time::now() - arm_loop_start).toSec() > ARM_LOOP_TIMEOUT)
+	{
+	  std::cout << "Timeout reached, exiting." << std::endl;  
+	  arm_stop_push = true;
+	}
+	
+	arm_loop_rate.sleep();
+	
     }
       
     fpub.send_force_arms(Eigen::Vector6d::Zero());
@@ -921,8 +943,8 @@ int main(int argc, char **argv)
     ci.setTargetPose("com", pose, 4.0);
     ci.waitReachCompleted("com");
     
-    set_legs_default_stiffness(robot, K0_legs);
-    set_arms_default_stiffness(robot, K0_arms);
+    set_legs_default_stiffness(robot, K0_leg);
+    set_arms_default_stiffness(robot, K0_arm);
     
     }
     
